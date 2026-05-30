@@ -1,0 +1,60 @@
+name: km2apps
+description: تطبيق خلفيات عالي الجودة من GitHub
+
+# ✅ قسم البيئة
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+publish_to: 'none'
+version: 1.0.0+1
+
+dependencies:
+  flutter:
+    sdk: flutter
+  
+  # State Management
+  provider: ^6.1.1
+  google_mobile_ads: ^5.1.0
+  
+  # Images & UI
+  cached_network_image: ^3.3.1
+  shimmer: ^3.0.0
+  google_fonts: ^6.1.0
+  
+  # Network & Storage
+  http: ^1.1.2
+  dio: ^5.4.0
+  path_provider: ^2.1.2
+  shared_preferences: ^2.2.2
+  
+  # Permissions & Gallery
+  permission_handler: ^11.2.0
+  saver_gallery: ^3.0.6
+  share_plus: ^9.0.0
+  
+  # Device Information (تم تصحيح مكانها هنا)
+  device_info_plus: ^10.1.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.1
+  
+  # مكتبة تغيير الأيقونات
+  flutter_launcher_icons: ^0.13.1
+
+# إعدادات أيقونة التطبيق
+flutter_launcher_icons:
+  android: "launcher_icon"
+  ios: true
+  image_path: "assets/icon.png"
+  # إعدادات الأيقونات الحديثة لأندرويد (Adaptive Icons)
+  adaptive_icon_background: "#FFFFFF" 
+  adaptive_icon_foreground: "assets/icon.png"
+
+flutter:
+  uses-material-design: true
+  
+  # قسم الملفات الملحقة
+  assets:
+    - assets/icon.png
