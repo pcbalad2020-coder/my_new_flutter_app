@@ -61,3 +61,17 @@ flutter:
   uses-material-design: true
   assets:
     - assets/icon.png
+
+# ═══════════════════════════════════════════
+# إجبار جميع حزم webview على استخدام مستودع pub.dev (CocoaPods) فقط
+# هذا يحل تضارب Swift Package Manager نهائياً
+dependency_overrides:
+  webview_flutter:
+    hosted: https://pub.dev
+  webview_flutter_android:
+    hosted: https://pub.dev
+  webview_flutter_wkwebview:
+    hosted: https://pub.dev
+  webview_flutter_platform_interface:
+    hosted: https://pub.dev
+# ═══════════════════════════════════════════

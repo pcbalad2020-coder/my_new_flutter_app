@@ -1,52 +1,36 @@
 workflows:
-  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  # iOS Build for Sideloadly - بسيط وموثوق
-  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   ios-sideloadly:
     name: Build IPA for Sideloadly
     instance_type: mac_mini_m1
-    max_build_duration: 60
+    max_build_duration: 90
     
     environment:
-      flutter: stable
+      # ⭐ تثبيت إصدار Flutter محدد (مستقر ومعروف بعدم وجود مشاكل SPM)
+      flutter: 3.24.0
       xcode: latest
       cocoapods: default
       vars:
-        # ⭐ هذا هو السطر الحاسم الذي يحل تضارب SPM
         FLUTTER_IOS_USE_SWIFT_PACKAGE_MANAGER: "false"
         BUNDLE_ID: "com.example.wallpaper"
     
-    triggering:
-      events:
-        - push
-      branch:
-        patterns:
-          - pattern: main
-            include: true
-    
     scripts:
-      - name: 🔥 Clean Everything
+      - name: 🔥 Nuclear Clean
         script: |
           flutter clean
           rm -rf .dart_tool build ios/Pods ios/Podfile.lock ios/Flutter/ephemeral
           rm -rf ~/Library/Caches/CocoaPods ~/.cocoapods
           rm -f .flutter-plugins .flutter-plugins-dependencies pubspec.lock
-          echo "✅ Cache cleared"
+          echo "✅ All cache cleared"
       
       - name: 📦 Install Dependencies
         script: |
           flutter pub get
-          echo "✅ Dependencies installed"
+          echo "✅ Dependencies: $(flutter pub deps --style=compact | grep -c webview || echo 0) webview packages found"
       
-      - name: 🛠️ Build IPA (No Codesign)
+      - name: 🛠️ Build IPA
         script: |
-          # هذا الأمر يكفي! يقوم بـ:
-          # 1. flutter pub get
-          # 2. pod install (بـ CocoaPods فقط بفضل المتغير أعلاه)
-          # 3. Xcode build
-          # 4. تصدير .ipa
           flutter build ipa --release --no-codesign
-          echo "✅ IPA built successfully"
+          echo "✅ IPA built at: $(ls build/ios/ipa/*.ipa 2>/dev/null || echo 'Not found')"
     
     artifacts:
       - build/ios/ipa/*.ipa
