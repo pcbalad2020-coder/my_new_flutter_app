@@ -12,35 +12,41 @@ dependencies:
   flutter:
     sdk: flutter
   
-  # State Management
+  # ── State Management ──
   provider: ^6.1.1
+  
+  # ── Ads ──
   google_mobile_ads: ^5.1.0
   
-  # Images & UI
+  # ── Images & UI ──
   cached_network_image: ^3.3.1
   shimmer: ^3.0.0
   google_fonts: ^6.1.0
   
-  # Network & Storage
+  # ── Network & Storage ──
   http: ^1.1.2
   dio: ^5.4.0
   path_provider: ^2.1.2
   shared_preferences: ^2.2.2
   
-  # Permissions & Gallery
+  # ── Permissions & Gallery ──
   permission_handler: ^11.2.0
   saver_gallery: ^3.0.6
   share_plus: ^9.0.0
   
-  # Device Information (تم تصحيح مكانها هنا)
+  # ── Device Info ──
   device_info_plus: ^10.1.0
+
+  # ═══════════════════════════════════════════
+  # ➕ مكان إضافة المكتبات الجديدة:
+  # مثال:
+  # url_launcher: ^6.2.5
+  # ═══════════════════════════════════════════
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^3.0.1
-  
-  # مكتبة تغيير الأيقونات
   flutter_launcher_icons: ^0.13.1
 
 # إعدادات أيقونة التطبيق
@@ -48,13 +54,10 @@ flutter_launcher_icons:
   android: "launcher_icon"
   ios: true
   image_path: "assets/icon.png"
-  # إعدادات الأيقونات الحديثة لأندرويد (Adaptive Icons)
   adaptive_icon_background: "#FFFFFF" 
   adaptive_icon_foreground: "assets/icon.png"
 
 flutter:
   uses-material-design: true
-  
-  # قسم الملفات الملحقة
   assets:
     - assets/icon.png
