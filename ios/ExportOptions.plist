@@ -2,48 +2,17 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<!-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
-	<!-- Export Options for IPA - خيارات التصدير -->
-	<!-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
-	
-	<!-- Method: app-store أو ad-hoc أو enterprise أو development -->
-	<key>method</key>
-	<string>app-store</string>
-	
-	<!-- Team ID من Developer Account -->
-	<key>teamID</key>
-	<string>XXXXXXXXXX</string>
-	
-	<!-- Signing Style -->
-	<key>signingStyle</key>
-	<string>automatic</string>
-	
-	<!-- Provisioning Profile Specifier -->
-	<key>provisioningProfileSpecifier</key>
-	<string>match AppStore com.example.wallpaper</string>
-	
-	<!-- Code Signing Identity -->
-	<key>codeSigningIdentity</key>
-	<string>iPhone Distribution</string>
-	
-	<!-- Manifest Dictionary (اختياري للـ enterprise/ad-hoc) -->
-	<!-- يمكن ترك هذا للمتاجر الاحترافية -->
-	
-	<!-- يجب تضمين جميع الأيقونات والأصول -->
-	<key>stripSwiftSymbols</key>
-	<true/>
-	
-	<!-- تفعيل Bitcode -->
-	<key>uploadBitcode</key>
-	<true/>
-	
-	<!-- تفعيل على-demand resources -->
-	<key>uploadOnDemandResources</key>
-	<true/>
-	
-	<!-- التعامل مع المكتبات المجاورة -->
-	<key>useAppHostingLocationForBitcode</key>
-	<false/>
-	
+    <key>method</key>
+    <string>development</string>
+    <key>signingStyle</key>
+    <string>automatic</string>
+    <key>generateAppStoreInformation</key>
+    <false/>
+    <key>uploadBitcode</key>
+    <false/>
+    <key>compileBitcode</key>
+    <false/>
+    <key>uploadSymbols</key>
+    <false/>
 </dict>
 </plist>
