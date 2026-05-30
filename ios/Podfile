@@ -1,0 +1,10 @@
+# @flutter_tool: use_swift_package_manager=false
+
+platform :ios, '13.0'
+
+target 'Runner' do
+  use_frameworks!
+  use_modular_headers!
+
+  flutter_install_all_ios_pods File.dirname(File.expand_path(__file__))
+end
