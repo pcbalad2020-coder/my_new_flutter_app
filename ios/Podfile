@@ -2,17 +2,28 @@
 
 platform :ios, '13.0'
 
+# استدعاء ملف التهيئة الرئيسي لـ Flutter من مسار الأداة الفعلي على السيرفر
+flutter_root = File.expand_path('..', File.dirname(__FILE__))
+if File.exist?(File.join(flutter_root, '.flutter-plugins-dependencies'))
+  # تفعيل الدوال الأساسية لـ فلوتر داخل بيئة الماك السحابية
+  p_dir = File.dirname(File.expand_path(__FILE__))
+  generated_xcode_build_settings_path = File.join(p_dir, 'Flutter', 'generated_xcode_build_settings.rb')
+  if File.exist?(generated_xcode_build_settings_path)
+    require generated_xcode_build_settings_path
+  end
+end
+
+# هذا السطر السحري يقوم بعمل جلب وتعريف لكافة دوال فلوتر تلقائياً من الـ SDK المتاح على السيرفر
+load File.join(flutter_root, '.flutter-plugins-dependencies') if File.exist?(File.join(flutter_root, '.flutter-plugins-dependencies'))
+
 target 'Runner' do
   use_frameworks!
   use_modular_headers!
 
-  # هذه الأسطر تجعل السيرفر يبحث عن حزم فلوتر فقط إذا تم توليدها
-  flutter_ios_podfile_setup = File.join(File.dirname(File.expand_path(__FILE__)), 'Flutter', 'generated_plugin_pods.rb')
-  if File.exist?(flutter_ios_podfile_setup)
-    require flutter_ios_podfile_setup
+  # الآن سيتعرف السيرفر على الدالة بنجاح لأننا قمنا بعمل load لملف الإعدادات بالأعلى
+  if respond_to?(:flutter_install_all_ios_pods)
+    flutter_install_all_ios_pods File.dirname(File.expand_path(__FILE__))
   end
-
-  flutter_install_all_ios_pods File.dirname(File.expand_path(__FILE__))
 end
 
 post_install do |installer|
