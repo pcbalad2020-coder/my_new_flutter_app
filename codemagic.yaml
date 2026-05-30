@@ -1,7 +1,4 @@
 workflows:
-  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  # iOS Build for Sideloadly - نهائي وموثوق
-  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   ios-sideloadly:
     name: Build IPA for Sideloadly
     instance_type: mac_mini_m1
@@ -9,59 +6,52 @@ workflows:
     
     environment:
       flutter: 3.24.0
-      xcode: latest
-      cocoapods: default
       vars:
-        # ⭐ السطر الحاسم: إجبار النظام على استخدام CocoaPods فقط
         FLUTTER_IOS_USE_SWIFT_PACKAGE_MANAGER: "false"
-        BUNDLE_ID: "com.example.wallpaper"
-    
-    triggering:
-      events:
-        - push
-      branch:
-        patterns:
-          - pattern: main
-            include: true
     
     scripts:
-      - name: 🔥 Ultra Clean Cache
+      - name: 🔥 Clean Cache
         script: |
-          echo "🧹 Cleaning all caches..."
           flutter clean
-          rm -rf .dart_tool build ios/Pods ios/Podfile.lock ios/Flutter/ephemeral
-          rm -rf ~/Library/Caches/CocoaPods ~/.cocoapods
-          rm -f .flutter-plugins .flutter-plugins-dependencies pubspec.lock
-          echo "✅ Cache cleared successfully"
-      
-      - name: 📦 Install Dependencies
-        script: |
-          echo "📦 Installing Flutter dependencies..."
-          flutter pub get
-          echo "✅ Dependencies installed"
+          rm -rf .dart_tool build ios/Pods ios/Podfile.lock
+          rm -rf ~/Library/Caches/CocoaPods
+          rm -f .flutter-plugins* pubspec.lock
           
-          # تحقق سريع من عدم وجود تضارب
-          echo "🔍 Checking webview packages..."
-          flutter pub deps --style=compact | grep webview || echo "No webview conflicts found"
+      - name: 📦 Install Dependencies
+        script: flutter pub get
       
-      - name: 🛠️ Build IPA with Basic Signing
+      - name: 🛠️ Build IPA (No Signing)
         script: |
-          echo "🔨 Building IPA..."
-          # استخدام ExportOptions.plist للتوقيع التلقائي البسيط
-          flutter build ipa --release \
-            --export-options-plist=ios/ExportOptions.plist
-          echo "✅ IPA built successfully"
-          echo "📦 Output: $(ls build/ios/ipa/*.ipa 2>/dev/null || echo 'Not found')"
+          # هذا الأمر يبني بدون أي توقيع
+          flutter build ipa --release --no-codesign
+          
+      - name: 📦 Create IPA without signing
+        script: |
+          # طريقة بديلة: بناء .app ثم تحويله لـ .ipa يدوياً
+          cd ios
+          
+          # بناء المشروع بدون توقيع
+          xcodebuild -workspace Runner.xcworkspace \
+            -scheme Runner \
+            -configuration Release \
+            -derivedDataPath build \
+            -allowProvisioningUpdates \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+            
+          # إنشاء مجلد Payload
+          mkdir -p Payload
+          cp -R build/Build/Products/Release-iphoneos/Runner.app Payload/
+          
+          # ضغط إلى IPA
+          zip -r ../Runner.ipa Payload
+          cd ..
+          
+          echo "✅ IPA created: $(ls -lh ios/Runner.ipa)"
     
     artifacts:
       - build/ios/ipa/*.ipa
+      - ios/Runner.ipa
       - /tmp/xcodebuild_logs/*.log
-      - ios/ExportOptions.plist
-    
-    publishing:
-      email:
-        recipients:
-          - $EMAIL_ADDRESS
-        notify:
-          success: true
-          failure: true
