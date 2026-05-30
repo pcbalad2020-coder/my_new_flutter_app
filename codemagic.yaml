@@ -8,6 +8,8 @@ workflows:
       flutter: 3.24.0
       vars:
         FLUTTER_IOS_USE_SWIFT_PACKAGE_MANAGER: "false"
+        # ⭐ مهم جداً: فريق تطوير فارغ
+        DEVELOPMENT_TEAM: ""
     
     scripts:
       - name: 🔥 Clean Cache
@@ -20,38 +22,53 @@ workflows:
       - name: 📦 Install Dependencies
         script: flutter pub get
       
-      - name: 🛠️ Build IPA (No Signing)
+      - name: 🛠️ Build .app Bundle (No Signing)
         script: |
-          # هذا الأمر يبني بدون أي توقيع
-          flutter build ipa --release --no-codesign
-          
-      - name: 📦 Create IPA without signing
-        script: |
-          # طريقة بديلة: بناء .app ثم تحويله لـ .ipa يدوياً
           cd ios
           
-          # بناء المشروع بدون توقيع
+          # بناء المشروع بأوامر Xcode المباشرة مع تعطيل التوقيع كلياً
           xcodebuild -workspace Runner.xcworkspace \
             -scheme Runner \
             -configuration Release \
+            -sdk iphoneos \
             -derivedDataPath build \
-            -allowProvisioningUpdates \
-            CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_ALLOWED=NO \
-            build
-            
+            DEVELOPMENT_TEAM="" \
+            PROVISIONING_PROFILE="" \
+            COMPILER_INDEX_STORE_ENABLE=NO \
+            build -quiet
+          
+          echo "✅ .app built successfully"
+          
+      - name: 📦 Package as IPA
+        script: |
+          cd ios
+          
           # إنشاء مجلد Payload
-          mkdir -p Payload
-          cp -R build/Build/Products/Release-iphoneos/Runner.app Payload/
+          rm -rf Payload
+          mkdir -p Payload/Runner.app
+          
+          # نسخ التطبيق
+          cp -R build/Build/Products/Release-iphoneos/Runner.app/* Payload/Runner.app/
+          
+          # نسخ ملف Info.plist إذا لم يكن موجوداً
+          if [ ! -f Payload/Runner.app/Info.plist ]; then
+            cp build/Build/Products/Release-iphoneos/Runner.app/Info.plist Payload/Runner.app/ 2>/dev/null || true
+          fi
           
           # ضغط إلى IPA
-          zip -r ../Runner.ipa Payload
+          cd Payload
+          zip -r ../app-release.ipa Runner.app
           cd ..
           
-          echo "✅ IPA created: $(ls -lh ios/Runner.ipa)"
+          # نقل الناتج لمجلد يمكن لـ Codemagic الوصول إليه
+          mkdir -p ../../build/ios/ipa
+          cp app-release.ipa ../../build/ios/ipa/
+          
+          echo "✅ IPA created: $(ls -lh ../../build/ios/ipa/app-release.ipa)"
     
     artifacts:
       - build/ios/ipa/*.ipa
-      - ios/Runner.ipa
       - /tmp/xcodebuild_logs/*.log
