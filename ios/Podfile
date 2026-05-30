@@ -6,5 +6,5 @@ target 'Runner' do
   use_frameworks!
   use_modular_headers!
 
-  flutter_install_all_ios_pods File.dirname(File.expand_path(__file__))
+  flutter_install_all_ios_pods File.dirname(File.expand_path(__FILE__))
 end
