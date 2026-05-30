@@ -1,122 +1,56 @@
 workflows:
   # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  # iOS Build Configuration - لتصدير IPA
+  # iOS Build for Sideloadly - بسيط وموثوق
   # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  ios-release:
-    name: iOS Release Build
+  ios-sideloadly:
+    name: Build IPA for Sideloadly
     instance_type: mac_mini_m1
+    max_build_duration: 60
     
     environment:
-      ios_signing:
-        certificates:
-          - certificate_reference
-        provisioning_profiles:
-          - provisioning_profile_reference
-      vars:
-        BUNDLE_ID: "com.example.wallpaper"
-        APP_STORE_CONNECT_TEAM_ID: $APP_STORE_TEAM_ID
-        XCODE_WORKSPACE: "ios/Runner.xcworkspace"
-        XCODE_SCHEME: "Runner"
-        XCODE_BUILD_CONFIGURATION: "Release"
       flutter: stable
+      xcode: latest
+      cocoapods: default
+      vars:
+        # ⭐ هذا هو السطر الحاسم الذي يحل تضارب SPM
+        FLUTTER_IOS_USE_SWIFT_PACKAGE_MANAGER: "false"
+        BUNDLE_ID: "com.example.wallpaper"
     
     triggering:
       events:
         - push
-        - pull_request
       branch:
         patterns:
           - pattern: main
             include: true
-          - pattern: develop
-            include: true
     
     scripts:
-      - name: Get Flutter Dependencies
+      - name: 🔥 Clean Everything
+        script: |
+          flutter clean
+          rm -rf .dart_tool build ios/Pods ios/Podfile.lock ios/Flutter/ephemeral
+          rm -rf ~/Library/Caches/CocoaPods ~/.cocoapods
+          rm -f .flutter-plugins .flutter-plugins-dependencies pubspec.lock
+          echo "✅ Cache cleared"
+      
+      - name: 📦 Install Dependencies
         script: |
           flutter pub get
+          echo "✅ Dependencies installed"
       
-      - name: Build iOS App
+      - name: 🛠️ Build IPA (No Codesign)
         script: |
-          flutter build ios --release \
-            --no-codesign
-      
-      - name: Build IPA
-        script: |
-          cd ios
-          pod repo update
-          pod install --repo-update
-          cd ..
-          
-          xcodebuild -workspace ios/Runner.xcworkspace \
-            -scheme Runner \
-            -configuration Release \
-            -derivedDataPath build/ios_build \
-            -allowProvisioningUpdates \
-            -archivePath "build/ios_build/Runner.xcarchive" \
-            archive
-          
-          xcodebuild -exportArchive \
-            -archivePath "build/ios_build/Runner.xcarchive" \
-            -exportOptionsPlist "ios/ExportOptions.plist" \
-            -exportPath "build/ios_build/ipa" \
-            -allowProvisioningUpdates
+          # هذا الأمر يكفي! يقوم بـ:
+          # 1. flutter pub get
+          # 2. pod install (بـ CocoaPods فقط بفضل المتغير أعلاه)
+          # 3. Xcode build
+          # 4. تصدير .ipa
+          flutter build ipa --release --no-codesign
+          echo "✅ IPA built successfully"
     
     artifacts:
-      - build/ios_build/ipa/*.ipa
-      - build/ios_build/ipa/*.xcarchive
-    
-    publishing:
-      app_store_connect:
-        auth: integration
-        submit_to_app_store: false
-        submit_to_testflight: false
-        beta_groups: []
-      
-      email:
-        recipients:
-          - $EMAIL_ADDRESS
-        notify:
-          success: true
-          failure: true
-      
-      slack:
-        channel: '#builds'
-        notify_on_build_start: true
-        notify:
-          success: true
-          failure: true
-
-  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  # Android Build Configuration (اختياري)
-  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  android-release:
-    name: Android Release Build
-    instance_type: linux
-    
-    environment:
-      android_signing:
-        - keystore_reference
-      vars:
-        BUNDLE_ID: "com.example.wallpaper"
-      flutter: stable
-    
-    scripts:
-      - name: Get Flutter Dependencies
-        script: |
-          flutter pub get
-      
-      - name: Build APK
-        script: |
-          flutter build apk --release
-      
-      - name: Build App Bundle
-        script: |
-          flutter build appbundle --release
-    
-    artifacts:
-      - build/app/outputs/apk/release/*.apk
-      - build/app/outputs/bundle/release/*.aab
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
     
     publishing:
       email:
