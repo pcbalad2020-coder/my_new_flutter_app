@@ -16,7 +16,7 @@ dependencies:
   provider: ^6.1.1
   
   # ── Ads ──
-  google_mobile_ads: ^4.0.0
+  # google_mobile_ads: ^4.0.0
   
   # ── Images & UI ──
   cached_network_image: ^3.3.1
