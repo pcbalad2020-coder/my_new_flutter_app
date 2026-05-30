@@ -3,7 +3,7 @@
 # Set platform to iOS 13.0
 platform :ios, '13.0'
 
-import File.join(File.dirname(File.expand_path(__FILE__)), 'Flutter', 'generated_plugin_pods.rb')
+require File.join(File.dirname(File.expand_path(__FILE__)), 'Flutter', 'generated_plugin_pods.rb')
 
 target 'Runner' do
   use_frameworks!
