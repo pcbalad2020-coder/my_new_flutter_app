@@ -1,34 +1,42 @@
-# @flutter_tool: use_swift_package_manager=false
-
+# Uncomment this line to define a global platform for your project
 platform :ios, '13.0'
 
-# استدعاء ملف التهيئة الرئيسي لـ Flutter من مسار الأداة الفعلي على السيرفر
-flutter_root = File.expand_path('..', File.dirname(__FILE__))
-if File.exist?(File.join(flutter_root, '.flutter-plugins-dependencies'))
-  # تفعيل الدوال الأساسية لـ فلوتر داخل بيئة الماك السحابية
-  p_dir = File.dirname(File.expand_path(__FILE__))
-  generated_xcode_build_settings_path = File.join(p_dir, 'Flutter', 'generated_xcode_build_settings.rb')
-  if File.exist?(generated_xcode_build_settings_path)
-    require generated_xcode_build_settings_path
+# CocoaPods analytics sends network stats synchronously affecting flutter build latency.
+ENV['COCOAPODS_DISABLE_STATS'] = 'true'
+
+project 'Runner', {
+  'Debug' => :debug,
+  'Profile' => :release,
+  'Release' => :release,
+}
+
+def flutter_root
+  generated_xcode_build_settings_path = File.expand_path(File.join('..', 'Flutter', 'Generated.xcconfig'), __FILE__)
+  unless File.exist?(generated_xcode_build_settings_path)
+    raise "#{generated_xcode_build_settings_path} must exist. If you're running pod install manually, make sure flutter pub get is executed first"
   end
+
+  File.foreach(generated_xcode_build_settings_path) do |line|
+    matches = line.match(/FLUTTER_ROOT\=(.*)/)
+    return matches[1].strip if matches
+  end
+  raise "FLUTTER_ROOT not found in #{generated_xcode_build_settings_path}. Try deleting Generated.xcconfig, then run flutter pub get"
 end
 
-# هذا السطر السحري يقوم بعمل جلب وتعريف لكافة دوال فلوتر تلقائياً من الـ SDK المتاح على السيرفر
-load File.join(flutter_root, '.flutter-plugins-dependencies') if File.exist?(File.join(flutter_root, '.flutter-plugins-dependencies'))
+require File.expand_path('packages/flutter_tools/bin/podhelper', flutter_root)
+
+flutter_ios_podfile_setup
 
 target 'Runner' do
   use_frameworks!
   use_modular_headers!
 
-  # الآن سيتعرف السيرفر على الدالة بنجاح لأننا قمنا بعمل load لملف الإعدادات بالأعلى
-  if respond_to?(:flutter_install_all_ios_pods)
-    flutter_install_all_ios_pods File.dirname(File.expand_path(__FILE__))
-  end
+  flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
 end
 
 post_install do |installer|
   installer.pods_project.targets.each do |target|
-    flutter_additional_ios_allocations(target) if respond_to?(:flutter_additional_ios_allocations)
+    flutter_additional_ios_build_settings(target)
     target.build_configurations.each do |config|
       config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '13.0'
     end
