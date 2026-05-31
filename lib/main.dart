@@ -496,6 +496,7 @@ class GitHubService {
     'All Images': 'All-images',
     'New': 'All-images',
     'Best': 'All-images',
+    'Sport': 'sport',
     'Anime': 'anime_wallpapers',
     'anime': 'anime_wallpapers',
     'Cars': 'cars',
@@ -921,6 +922,14 @@ class FavoritesProvider with ChangeNotifier {
       _favorites.map((w) => jsonEncode(w.toJson())).toList(),
     );
   }
+
+  Future<void> clearAll() async {
+    _favoriteIds.clear();
+    _favorites.clear();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('favorites'); // كتابة واحدة فقط
+    notifyListeners();
+  }
 }
 
 class PrivacyProvider with ChangeNotifier {
@@ -950,14 +959,26 @@ class PermissionsInitializer {
   }
 
   static Future<void> _requestUntilGranted(BuildContext context) async {
-    while (true) {
+    int attempts = 0;
+    const int maxAttempts = 3;
+
+    while (attempts < maxAttempts) {
       final granted = await _checkAndRequest();
       if (granted) {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setBool('permissions_granted', true);
         return;
       }
+
+      attempts++;
       if (!context.mounted) return;
+
+      // إذا وصل للحد الأقصى، افتح الإعدادات وأخرج
+      if (attempts >= maxAttempts) {
+        openAppSettings();
+        return;
+      }
+
       final retry = await showDialog<bool>(
         context: context,
         barrierDismissible: false,
@@ -1015,7 +1036,7 @@ class PermissionsInitializer {
                 child: OutlinedButton.icon(
                   onPressed: () {
                     openAppSettings();
-                    Navigator.pop(context, true);
+                    Navigator.pop(context, false); // ← false بدل true للخروج
                   },
                   icon: const Icon(Icons.settings_outlined,
                       size: 16, color: Colors.grey),
@@ -1034,7 +1055,9 @@ class PermissionsInitializer {
           ),
         ),
       );
-      if (retry != true) continue;
+
+      // إذا ضغط "فتح الإعدادات" أو أغلق بطريقة ما — أخرج
+      if (retry != true) return;
     }
   }
 
@@ -2374,6 +2397,8 @@ class HomeScreen extends StatelessWidget {
       ),
       _sectionHeader(context, 'New', 'New'),
       _horizontalList(context, 'New'),
+      _sectionHeader(context, 'Sport', 'Sport'),
+      _horizontalList(context, 'Sport'),
       _sectionHeader(context, 'Anime', 'Anime'),
       _horizontalList(context, 'Anime'),
       _sectionHeader(context, '16:9', '16:9'),
@@ -2816,9 +2841,7 @@ class FavoritesScreen extends StatelessWidget {
           TextButton(
             onPressed: () async {
               Navigator.pop(context);
-              for (final w in List.from(provider.favorites)) {
-                await provider.toggle(w);
-              }
+              await provider.clearAll(); // ← كتابة واحدة بدل 50
             },
             child:
                 Text('مسح الكل', style: GoogleFonts.poppins(color: Colors.red)),
@@ -3286,6 +3309,12 @@ class MockData {
           repository: 'anime_wallpapers',
           icon: Icons.auto_awesome,
           accentColor: Colors.orange,
+        ),
+        CategoryModel(
+          name: 'sport',
+          repository: 'sport',
+          icon: Icons.sports,
+          accentColor: Colors.green,
         ),
         CategoryModel(
           name: 'Cars',
