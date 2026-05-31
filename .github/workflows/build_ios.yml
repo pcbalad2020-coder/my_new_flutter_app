@@ -24,10 +24,19 @@ jobs:
       with:
         channel: 'stable'
 
+    - name: Disable Swift Package Manager
+      run: flutter config --no-enable-swift-package-manager
+
     - name: Clean and Install dependencies
       run: |
         flutter clean
         flutter pub get
+
+    - name: Install CocoaPods dependencies
+      run: |
+        cd ios
+        rm -rf Pods Podfile.lock
+        pod install
 
     - name: Build IPA for Sideloading
       run: |
