@@ -2,7 +2,7 @@ name: Build iOS IPA for Sideloadly
 
 on:
   push:
-    branches: [ main ] # تأكد من مطابقة اسم الفرع لديك (main أو master)
+    branches: [ main ]
   workflow_dispatch:
 
 jobs:
@@ -27,16 +27,15 @@ jobs:
     - name: Install dependencies
       run: flutter pub get
 
-    # بناء التطبيق بدون توقيع مع تجميعه كملف حزمة
+    # تم إضافة خيار تعطيل SPM هنا لحل مشكلة تعارض مكتبة الإعلانات والـ webview
     - name: Build IPA for Sideloading
       run: |
-        flutter build ios --release --no-codesign
+        flutter build ios --release --no-codesign --no-pub-ios-swift-package-manager
         mkdir -p build/ios/iphoneos/Payload
         mv build/ios/iphoneos/Runner.app build/ios/iphoneos/Payload/
         cd build/ios/iphoneos
         zip -r FlutterApp.ipa Payload
 
-    # رفع ملف الـ IPA الناتج للتحميل
     - name: Upload IPA Artifact
       uses: actions/upload-artifact@v4
       with:
