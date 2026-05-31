@@ -1,7 +1,6 @@
 name: km2apps
 description: تطبيق خلفيات عالي الجودة من GitHub
 
-# ✅ قسم البيئة
 environment:
   sdk: '>=3.0.0 <4.0.0'
 
@@ -12,36 +11,19 @@ dependencies:
   flutter:
     sdk: flutter
   
-  # ── State Management ──
   provider: ^6.1.1
-  
-  # ── Ads ──
-  # google_mobile_ads: ^4.0.0
-  
-  # ── Images & UI ──
+  google_mobile_ads: ^5.1.0
   cached_network_image: ^3.3.1
   shimmer: ^3.0.0
   google_fonts: ^6.1.0
-  
-  # ── Network & Storage ──
   http: ^1.1.2
   dio: ^5.4.0
   path_provider: ^2.1.2
   shared_preferences: ^2.2.2
-  
-  # ── Permissions & Gallery ──
   permission_handler: ^11.2.0
   saver_gallery: ^3.0.6
   share_plus: ^9.0.0
-  
-  # ── Device Info ──
   device_info_plus: ^10.1.0
-
-  # ═══════════════════════════════════════════
-  # ➕ مكان إضافة المكتبات الجديدة:
-  # مثال:
-  # url_launcher: ^6.2.5
-  # ═══════════════════════════════════════════
 
 dev_dependencies:
   flutter_test:
@@ -49,7 +31,6 @@ dev_dependencies:
   flutter_lints: ^3.0.1
   flutter_launcher_icons: ^0.13.1
 
-# إعدادات أيقونة التطبيق
 flutter_launcher_icons:
   android: "launcher_icon"
   ios: true
@@ -61,17 +42,3 @@ flutter:
   uses-material-design: true
   assets:
     - assets/icon.png
-
-# ═══════════════════════════════════════════
-# إجبار جميع حزم webview على استخدام مستودع pub.dev (CocoaPods) فقط
-# هذا يحل تضارب Swift Package Manager نهائياً
-dependency_overrides:
-  webview_flutter:
-    hosted: https://pub.dev
-  webview_flutter_android:
-    hosted: https://pub.dev
-  webview_flutter_wkwebview:
-    hosted: https://pub.dev
-  webview_flutter_platform_interface:
-    hosted: https://pub.dev
-# ═══════════════════════════════════════════

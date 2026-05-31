@@ -1,0 +1,44 @@
+name: Build iOS IPA for Sideloadly
+
+on:
+  push:
+    branches: [ main ] # تأكد من مطابقة اسم الفرع لديك (main أو master)
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Java
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'zulu'
+        java-version: '17'
+
+    - name: Set up Flutter
+      uses: subosito/flutter-action@v2
+      with:
+        channel: 'stable'
+
+    - name: Install dependencies
+      run: flutter pub get
+
+    # بناء التطبيق بدون توقيع مع تجميعه كملف حزمة
+    - name: Build IPA for Sideloading
+      run: |
+        flutter build ios --release --no-codesign
+        mkdir -p build/ios/iphoneos/Payload
+        mv build/ios/iphoneos/Runner.app build/ios/iphoneos/Payload/
+        cd build/ios/iphoneos
+        zip -r FlutterApp.ipa Payload
+
+    # رفع ملف الـ IPA الناتج للتحميل
+    - name: Upload IPA Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: Sideload-Build
+        path: build/ios/iphoneos/FlutterApp.ipa
