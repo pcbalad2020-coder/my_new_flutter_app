@@ -1,0 +1,5 @@
+# تعطيل Swift Package Manager نهائياً للمشروع
+flutter:
+  plugins:
+    ios:
+      swift-package-manager: false

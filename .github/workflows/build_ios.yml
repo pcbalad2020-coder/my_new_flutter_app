@@ -24,17 +24,14 @@ jobs:
       with:
         channel: 'stable'
 
-    # حذف مجلد ios بالكامل لإجبار فلاتر على توليده بشكل نظيف خالٍ من كاش SPM
-    - name: Reconstruct iOS Project Cleanly
+    - name: Clean and Install dependencies
       run: |
-        rm -rf ios/Podfile.lock
         flutter clean
         flutter pub get
 
-    # بناء الحزمة مع تجميع ملف الـ IPA المناسب لـ Sideloadly
     - name: Build IPA for Sideloading
       run: |
-        flutter build ios --release --no-codesign --no-pub-ios-swift-package-manager
+        flutter build ios --release --no-codesign
         mkdir -p build/ios/iphoneos/Payload
         mv build/ios/iphoneos/Runner.app build/ios/iphoneos/Payload/
         cd build/ios/iphoneos
