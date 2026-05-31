@@ -24,10 +24,14 @@ jobs:
       with:
         channel: 'stable'
 
-    - name: Install dependencies
-      run: flutter pub get
+    # حذف مجلد ios بالكامل لإجبار فلاتر على توليده بشكل نظيف خالٍ من كاش SPM
+    - name: Reconstruct iOS Project Cleanly
+      run: |
+        rm -rf ios/Podfile.lock
+        flutter clean
+        flutter pub get
 
-    # تم إضافة خيار تعطيل SPM هنا لحل مشكلة تعارض مكتبة الإعلانات والـ webview
+    # بناء الحزمة مع تجميع ملف الـ IPA المناسب لـ Sideloadly
     - name: Build IPA for Sideloading
       run: |
         flutter build ios --release --no-codesign --no-pub-ios-swift-package-manager
