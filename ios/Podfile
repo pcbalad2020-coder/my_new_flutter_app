@@ -1,5 +1,3 @@
-# @flutter_tool: use_swift_package_manager=false
-
 platform :ios, '13.0'
 
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
@@ -39,7 +37,6 @@ post_install do |installer|
     flutter_additional_ios_build_settings(target)
     target.build_configurations.each do |config|
       config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '13.0'
-      # تعطيل Swift Package Manager لحل التضارب مع google_mobile_ads
       config.build_settings['BUILD_LIBRARY_FOR_DISTRIBUTION'] = 'NO'
       config.build_settings['SWIFT_VERSION'] = '5.0'
     end

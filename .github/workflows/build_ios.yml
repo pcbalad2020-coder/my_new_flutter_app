@@ -36,7 +36,6 @@ jobs:
       run: |
         cd ios
         rm -rf Pods Podfile.lock
-        sudo gem uninstall cocoapods -a -x --ignore-dependencies 2>/dev/null || true
         sudo gem install cocoapods -v 1.15.2
         pod install --repo-update
       env:
