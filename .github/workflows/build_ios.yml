@@ -24,20 +24,20 @@ jobs:
       with:
         channel: 'stable'
 
-    - name: Disable Swift Package Manager
-      run: flutter config --no-enable-swift-package-manager
-
-    - name: Clean and Install dependencies
+    # 1. تنظيف عميق وحل مشكلة الـ SPM عبر قراءة الاعتماديات من جديد
+    - name: Clean & Fetch Dependencies
       run: |
         flutter clean
         flutter pub get
 
-    - name: Install CocoaPods dependencies
+    # 2. خطوة حل العناد: تحديث مستودعات الـ Pods وتجاوز تعليق الـ Resolver
+    - name: Configure and Update iOS Pods
       run: |
         cd ios
-        rm -rf Pods Podfile.lock
-        pod install
+        pod repo update
+        pod install --repo-update
 
+    # 3. بناء الحزمة النهائية بصيغة متوافقة مع Sideloadly
     - name: Build IPA for Sideloading
       run: |
         flutter build ios --release --no-codesign
