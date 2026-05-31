@@ -32,6 +32,18 @@ jobs:
         flutter clean
         flutter pub get
 
+    - name: Force disable SPM in Flutter tools
+      run: |
+        FLUTTER_ROOT=$(flutter --version --machine | python3 -c "import sys,json; print(json.load(sys.stdin)['flutterRoot'])")
+        SPM_FILE="$FLUTTER_ROOT/packages/flutter_tools/lib/src/ios/swift_package_manager.dart"
+        if [ -f "$SPM_FILE" ]; then
+          sed -i '' 's/static bool isSwiftPackageManagerEnabled/\/\/ static bool isSwiftPackageManagerEnabled/' "$SPM_FILE" || true
+        fi
+        # تعطيل SPM عبر ملف الإعدادات
+        mkdir -p ~/.config/flutter
+        echo '{"enable-swift-package-manager": false}' > ~/.config/flutter/settings.json
+        cat ~/.config/flutter/settings.json
+
     - name: Install CocoaPods dependencies
       run: |
         cd ios

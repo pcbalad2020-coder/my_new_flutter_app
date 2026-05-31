@@ -3,3 +3,6 @@ flutter:
   plugins:
     ios:
       swift-package-manager: false
+      dependency_overrides:
+  webview_flutter_wkwebview:
+    version: ^3.0.0
