@@ -2667,7 +2667,7 @@ class HomeScreen extends StatelessWidget {
 // 11. OTHER SCREENS
 // =============================================================================
 class NewScreen extends StatelessWidget {
-  const NewScreen({Key? key}) : super(key: key);
+  const NewScreen({super.key});
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -2687,7 +2687,7 @@ class NewScreen extends StatelessWidget {
 }
 
 class BestScreen extends StatelessWidget {
-  const BestScreen({Key? key}) : super(key: key);
+  const BestScreen({super.key});
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -2707,7 +2707,7 @@ class BestScreen extends StatelessWidget {
 }
 
 class Screen169 extends StatelessWidget {
-  const Screen169({Key? key}) : super(key: key);
+  const Screen169({super.key});
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -2742,7 +2742,7 @@ class Screen169 extends StatelessWidget {
 }
 
 class FavoritesScreen extends StatelessWidget {
-  const FavoritesScreen({Key? key}) : super(key: key);
+  const FavoritesScreen({super.key});
   @override
   Widget build(BuildContext context) {
     return Consumer<FavoritesProvider>(
@@ -2850,7 +2850,7 @@ class FavoritesScreen extends StatelessWidget {
 }
 
 class CatalogScreen extends StatelessWidget {
-  const CatalogScreen({Key? key}) : super(key: key);
+  const CatalogScreen({super.key});
   @override
   Widget build(BuildContext context) {
     return CustomScrollView(slivers: [
@@ -3344,7 +3344,7 @@ class MockData {
 // 14. BOTTOM NAV
 // =============================================================================
 class CustomBottomNav extends StatelessWidget {
-  const CustomBottomNav({Key? key}) : super(key: key);
+  const CustomBottomNav({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -3446,7 +3446,7 @@ class _NavItem extends StatelessWidget {
 // 15. MAIN LAYOUT
 // =============================================================================
 class MainLayout extends StatefulWidget {
-  const MainLayout({Key? key}) : super(key: key);
+  const MainLayout({super.key});
   @override
   State<MainLayout> createState() => _MainLayoutState();
 }
@@ -3533,7 +3533,7 @@ class _MainLayoutState extends State<MainLayout> {
 // 16. APP & MAIN
 // =============================================================================
 class WallpaperApp extends StatelessWidget {
-  const WallpaperApp({Key? key}) : super(key: key);
+  const WallpaperApp({super.key});
 
   @override
   Widget build(BuildContext context) {
