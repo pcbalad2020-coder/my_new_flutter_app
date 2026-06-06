@@ -3501,8 +3501,8 @@ class MockData {
           accentColor: Colors.orange,
         ),
         CategoryModel(
-          name: 'sport',
-          repository: 'sport',
+          name: 'Sport',
+          repository: 'Sport',
           icon: Icons.sports,
           accentColor: Colors.green,
         ),
