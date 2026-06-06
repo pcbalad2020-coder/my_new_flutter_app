@@ -335,7 +335,8 @@ class _SmartBannerAdWidgetState extends State<SmartBannerAdWidget> {
   }
 
   Future<void> _loadSmartBanner() async {
-    final size = await AdSize.getLargeAnchoredAdaptiveBannerAdSize(
+    final size = await AdSize.getAnchoredAdaptiveBannerAdSize(
+      Orientation.portrait,
       MediaQuery.of(context).size.width.truncate(),
     );
     if (size == null) return;
