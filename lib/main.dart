@@ -16,6 +16,7 @@ import 'dart:async';
 import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:google_mobile_ads/google_mobile_ads.dart';
 
 // =============================================================================
 // 📝 App Logger — نظام الـ logging
@@ -25,6 +26,393 @@ class AppLogger {
   static void success(String msg) => debugPrint('✅ $msg');
   static void warning(String msg) => debugPrint('⚠️  $msg');
   static void error(String msg) => debugPrint('❌ $msg');
+}
+
+// =============================================================================
+// 0. ADMOB SERVICE — خدمة إدارة جميع أنواع الإعلانات
+// =============================================================================
+class AdMobIds {
+  static String get bannerAdUnitId {
+    if (Platform.isAndroid) {
+      return 'ca-app-pub-3064608249204898/9864859917';
+    } else {
+      return 'ca-app-pub-3940256099942544/2934735716';
+    }
+  }
+
+  static String get interstitialAdUnitId {
+    if (Platform.isAndroid) {
+      return 'ca-app-pub-3064608249204898/8864361091';
+    } else {
+      return 'ca-app-pub-3940256099942544/4411468910';
+    }
+  }
+
+  static String get rewardedAdUnitId {
+    if (Platform.isAndroid) {
+      return 'ca-app-pub-3940256099942544/5224354917';
+    } else {
+      return 'ca-app-pub-3940256099942544/1712485313';
+    }
+  }
+
+  static String get nativeAdUnitId {
+    if (Platform.isAndroid) {
+      return 'ca-app-pub-3064608249204898/3617343236';
+    } else {
+      return 'ca-app-pub-3940256099942544/3986624511';
+    }
+  }
+
+  static String get appOpenAdUnitId {
+    if (Platform.isAndroid) {
+      return 'ca-app-pub-3064608249204898/7140215889';
+    } else {
+      return 'ca-app-pub-3940256099942544/5575463023';
+    }
+  }
+}
+
+class AdMobManager {
+  static final AdMobManager _instance = AdMobManager._internal();
+  factory AdMobManager() => _instance;
+  AdMobManager._internal();
+
+  InterstitialAd? _interstitialAd;
+  int _interstitialLoadAttempts = 0;
+  static const int _maxFailedLoadAttempts = 3;
+
+  RewardedAd? _rewardedAd;
+  int _rewardedLoadAttempts = 0;
+
+  AppOpenAd? _appOpenAd;
+  bool _isShowingAd = false;
+  DateTime? _appOpenLoadTime;
+
+  int _viewCount = 0;
+  static const int _interstitialInterval = 5;
+
+  Future<void> initialize() async {
+    await MobileAds.instance.initialize();
+    _loadInterstitialAd();
+    _loadRewardedAd();
+    _loadAppOpenAd();
+  }
+
+  BannerAd createBannerAd() {
+    return BannerAd(
+      adUnitId: AdMobIds.bannerAdUnitId,
+      size: AdSize.banner,
+      request: const AdRequest(),
+      listener: BannerAdListener(
+        onAdLoaded: (ad) => AppLogger.success('Banner ad loaded'),
+        onAdFailedToLoad: (ad, error) {
+          AppLogger.error('Banner ad failed: $error');
+          ad.dispose();
+        },
+      ),
+    );
+  }
+
+  void _loadInterstitialAd() {
+    InterstitialAd.load(
+      adUnitId: AdMobIds.interstitialAdUnitId,
+      request: const AdRequest(),
+      adLoadCallback: InterstitialAdLoadCallback(
+        onAdLoaded: (ad) {
+          _interstitialAd = ad;
+          _interstitialLoadAttempts = 0;
+          _interstitialAd!.setImmersiveMode(true);
+        },
+        onAdFailedToLoad: (error) {
+          _interstitialLoadAttempts++;
+          _interstitialAd = null;
+          if (_interstitialLoadAttempts < _maxFailedLoadAttempts) {
+            _loadInterstitialAd();
+          }
+        },
+      ),
+    );
+  }
+
+  void showInterstitialAd({VoidCallback? onComplete}) {
+    if (_interstitialAd == null) {
+      onComplete?.call();
+      _loadInterstitialAd();
+      return;
+    }
+    _interstitialAd!.fullScreenContentCallback = FullScreenContentCallback(
+      onAdDismissedFullScreenContent: (ad) {
+        ad.dispose();
+        _interstitialAd = null;
+        _loadInterstitialAd();
+        onComplete?.call();
+      },
+      onAdFailedToShowFullScreenContent: (ad, error) {
+        ad.dispose();
+        _interstitialAd = null;
+        _loadInterstitialAd();
+        onComplete?.call();
+      },
+    );
+    _interstitialAd!.show();
+  }
+
+  void trackWallpaperView({VoidCallback? onAdComplete}) {
+    _viewCount++;
+    if (_viewCount % _interstitialInterval == 0) {
+      showInterstitialAd(onComplete: onAdComplete);
+    } else {
+      onAdComplete?.call();
+    }
+  }
+
+  void _loadRewardedAd() {
+    RewardedAd.load(
+      adUnitId: AdMobIds.rewardedAdUnitId,
+      request: const AdRequest(),
+      rewardedAdLoadCallback: RewardedAdLoadCallback(
+        onAdLoaded: (ad) {
+          _rewardedAd = ad;
+          _rewardedLoadAttempts = 0;
+        },
+        onAdFailedToLoad: (error) {
+          _rewardedLoadAttempts++;
+          _rewardedAd = null;
+          if (_rewardedLoadAttempts < _maxFailedLoadAttempts) {
+            _loadRewardedAd();
+          }
+        },
+      ),
+    );
+  }
+
+  void showRewardedAd({
+    required Function(AdWithoutView, RewardItem) onUserEarnedReward,
+    VoidCallback? onAdDismissed,
+  }) {
+    if (_rewardedAd == null) return;
+    _rewardedAd!.fullScreenContentCallback = FullScreenContentCallback(
+      onAdDismissedFullScreenContent: (ad) {
+        ad.dispose();
+        _rewardedAd = null;
+        _loadRewardedAd();
+        onAdDismissed?.call();
+      },
+      onAdFailedToShowFullScreenContent: (ad, error) {
+        ad.dispose();
+        _rewardedAd = null;
+        _loadRewardedAd();
+      },
+    );
+    _rewardedAd!.show(onUserEarnedReward: onUserEarnedReward);
+  }
+
+  bool get isRewardedAdReady => _rewardedAd != null;
+
+  void _loadAppOpenAd() {
+    AppOpenAd.load(
+      adUnitId: AdMobIds.appOpenAdUnitId,
+      request: const AdRequest(),
+      adLoadCallback: AppOpenAdLoadCallback(
+        onAdLoaded: (ad) {
+          _appOpenAd = ad;
+          _appOpenLoadTime = DateTime.now();
+        },
+        onAdFailedToLoad: (error) {
+          _appOpenAd = null;
+        },
+      ),
+    );
+  }
+
+  bool get _isAppOpenAdAvailable {
+    if (_appOpenAd == null) return false;
+    if (_appOpenLoadTime != null) {
+      final diff = DateTime.now().difference(_appOpenLoadTime!);
+      return diff.inHours < 4;
+    }
+    return false;
+  }
+
+  void showAppOpenAd() {
+    if (!_isAppOpenAdAvailable || _isShowingAd) {
+      _loadAppOpenAd();
+      return;
+    }
+    _appOpenAd!.fullScreenContentCallback = FullScreenContentCallback(
+      onAdShowedFullScreenContent: (ad) {
+        _isShowingAd = true;
+      },
+      onAdDismissedFullScreenContent: (ad) {
+        _isShowingAd = false;
+        ad.dispose();
+        _appOpenAd = null;
+        _loadAppOpenAd();
+      },
+      onAdFailedToShowFullScreenContent: (ad, error) {
+        _isShowingAd = false;
+        ad.dispose();
+        _appOpenAd = null;
+        _loadAppOpenAd();
+      },
+    );
+    _appOpenAd!.show();
+  }
+
+  void dispose() {
+    _interstitialAd?.dispose();
+    _rewardedAd?.dispose();
+    _appOpenAd?.dispose();
+  }
+}
+
+// ─── Banner Ad Widget ─────────────────────────────────────────────────────────
+class BannerAdWidget extends StatefulWidget {
+  final AdSize adSize;
+  const BannerAdWidget({super.key, this.adSize = AdSize.banner});
+  @override
+  State<BannerAdWidget> createState() => _BannerAdWidgetState();
+}
+
+class _BannerAdWidgetState extends State<BannerAdWidget> {
+  BannerAd? _bannerAd;
+  bool _isLoaded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAd();
+  }
+
+  void _loadAd() {
+    _bannerAd = BannerAd(
+      adUnitId: AdMobIds.bannerAdUnitId,
+      size: widget.adSize,
+      request: const AdRequest(),
+      listener: BannerAdListener(
+        onAdLoaded: (ad) {
+          if (mounted) setState(() => _isLoaded = true);
+        },
+        onAdFailedToLoad: (ad, error) => ad.dispose(),
+      ),
+    );
+    _bannerAd!.load();
+  }
+
+  @override
+  void dispose() {
+    _bannerAd?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_isLoaded || _bannerAd == null) return const SizedBox.shrink();
+    return Container(
+      alignment: Alignment.center,
+      width: _bannerAd!.size.width.toDouble(),
+      height: _bannerAd!.size.height.toDouble(),
+      child: AdWidget(ad: _bannerAd!),
+    );
+  }
+}
+
+class SmartBannerAdWidget extends StatefulWidget {
+  const SmartBannerAdWidget({super.key});
+  @override
+  State<SmartBannerAdWidget> createState() => _SmartBannerAdWidgetState();
+}
+
+class _SmartBannerAdWidgetState extends State<SmartBannerAdWidget> {
+  BannerAd? _bannerAd;
+  bool _isLoaded = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_bannerAd == null) _loadSmartBanner();
+  }
+
+  Future<void> _loadSmartBanner() async {
+    final size = await AdSize.getLargeAnchoredAdaptiveBannerAdSize(
+      MediaQuery.of(context).size.width.truncate(),
+    );
+    if (size == null) return;
+    _bannerAd = BannerAd(
+      adUnitId: AdMobIds.bannerAdUnitId,
+      size: size,
+      request: const AdRequest(),
+      listener: BannerAdListener(
+        onAdLoaded: (ad) {
+          if (mounted) setState(() => _isLoaded = true);
+        },
+        onAdFailedToLoad: (ad, error) => ad.dispose(),
+      ),
+    );
+    await _bannerAd!.load();
+  }
+
+  @override
+  void dispose() {
+    _bannerAd?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_isLoaded || _bannerAd == null) return const SizedBox.shrink();
+    return SizedBox(
+      width: _bannerAd!.size.width.toDouble(),
+      height: _bannerAd!.size.height.toDouble(),
+      child: AdWidget(ad: _bannerAd!),
+    );
+  }
+}
+
+class RewardedAdButton extends StatelessWidget {
+  final String label;
+  final VoidCallback onRewardEarned;
+  const RewardedAdButton({
+    super.key,
+    this.label = 'شاهد إعلاناً للحصول على مكافأة',
+    required this.onRewardEarned,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ElevatedButton.icon(
+      onPressed: () {
+        AdMobManager().showRewardedAd(
+          onUserEarnedReward: (ad, reward) => onRewardEarned(),
+          onAdDismissed: () {
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('🎉 شكراً! تم فتح الميزة',
+                      style: GoogleFonts.poppins()),
+                  backgroundColor: Colors.green[700],
+                  behavior: SnackBarBehavior.floating,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                ),
+              );
+            }
+          },
+        );
+      },
+      icon: const Icon(Icons.play_circle_outline, size: 18),
+      label: Text(label,
+          style:
+              GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600)),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: Colors.amber[700],
+        foregroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      ),
+    );
+  }
 }
 
 // =============================================================================
@@ -737,10 +1125,10 @@ Privacy Policy – 4K Wallpapers
 آخر تحديث / Last Updated: مايو 2026
 
 مرحباً بك في تطبيق 4K خلفيات.
-نحن نحترم خصوصيتك ونلتزم بحماية بيانات المستخدمين.
+نحن نحترم خصوصيتك ونلتزم بحماية بيانات المستخدمين وفقاً لسياسات Google Play وGoogle AdMob.
 
 Welcome to 4K Wallpapers App.
-We respect your privacy and are committed to protecting user information.
+We respect your privacy and are committed to protecting user information in accordance with Google Play and Google AdMob policies.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━
 1. المعلومات التي يتم جمعها
@@ -774,9 +1162,16 @@ Collected data may include:
 Advertising
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-هذا التطبيق لا يحتوي على إعلانات.
+يستخدم التطبيق خدمة Google AdMob لعرض الإعلانات داخل التطبيق.
 
-This app does not contain advertisements.
+The app uses Google AdMob to display advertisements.
+
+قد تستخدم Google وشركاؤها ملفات تعريف الارتباط ومعرّفات الإعلانات لعرض إعلانات مخصصة.
+
+Google and its partners may use cookies and advertising identifiers to provide personalized ads.
+
+لمعرفة المزيد:
+https://www.km2za.com/p/privacy-policy.html
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━
 3. أذونات التطبيق
@@ -788,10 +1183,10 @@ App Permissions
 The app may request the following permissions:
 
 • إذن الإنترنت:
-لتحميل الصور من GitHub.
+لتحميل الصور وعرض الإعلانات.
 
 • Internet Permission:
-Used to load wallpapers from GitHub.
+Used to load wallpapers and advertisements.
 
 • إذن التخزين أو الصور:
 لحفظ الخلفيات داخل جهاز المستخدم فقط.
@@ -809,6 +1204,8 @@ Third-Party Services
 The app may use third-party services such as:
 
 • Google Play Services
+• Google AdMob
+• Firebase Analytics
 • Firebase Crashlytics
 
 لكل خدمة سياسة خصوصية خاصة بها.
@@ -867,13 +1264,13 @@ class GlassContainer extends StatelessWidget {
   final BorderRadius borderRadius;
 
   const GlassContainer({
-    Key? key,
+    super.key,
     required this.child,
     this.blur = 12.0,
     this.opacity = 0.08,
     this.padding = EdgeInsets.zero,
     this.borderRadius = const BorderRadius.all(Radius.circular(20)),
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -896,7 +1293,7 @@ class GlassContainer extends StatelessWidget {
 }
 
 class ShimmerLoadingCard extends StatelessWidget {
-  const ShimmerLoadingCard({Key? key}) : super(key: key);
+  const ShimmerLoadingCard({super.key});
   @override
   Widget build(BuildContext context) {
     return Shimmer.fromColors(
@@ -914,7 +1311,7 @@ class ShimmerLoadingCard extends StatelessWidget {
 
 class FavoriteButton extends StatelessWidget {
   final WallpaperModel wallpaper;
-  const FavoriteButton({Key? key, required this.wallpaper}) : super(key: key);
+  const FavoriteButton({super.key, required this.wallpaper});
 
   @override
   Widget build(BuildContext context) {
@@ -927,9 +1324,8 @@ class FavoriteButton extends StatelessWidget {
             if (context.mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
-                  content: Text(
-                      isFav ? '💔 حُذف من المفضلة' : '❤️ أُضيف للمفضلة',
-                      style: GoogleFonts.poppins()),
+                  content:
+                      Text(isFav ? '💔 حُذف من المفضلة' : '❤️ أُضيف للمفضلة'),
                   duration: const Duration(seconds: 1),
                   behavior: SnackBarBehavior.floating,
                   shape: RoundedRectangleBorder(
@@ -967,13 +1363,13 @@ class WallpaperCard extends StatelessWidget {
   final Object heroTag;
 
   const WallpaperCard({
-    Key? key,
+    super.key,
     required this.wallpaper,
     required this.heroTag,
     this.onTap,
     this.width,
     this.height,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1060,11 +1456,11 @@ class WallpaperCard169 extends StatelessWidget {
   final Object heroTag;
 
   const WallpaperCard169({
-    Key? key,
+    super.key,
     required this.wallpaper,
     required this.heroTag,
     this.onTap,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1337,7 +1733,7 @@ class _PrivacyPolicyDialogState extends State<PrivacyPolicyDialog> {
 // 7. SPLASH SCREEN
 // =============================================================================
 class SplashScreen extends StatefulWidget {
-  const SplashScreen({Key? key}) : super(key: key);
+  const SplashScreen({super.key});
   @override
   State<SplashScreen> createState() => _SplashScreenState();
 }
@@ -1375,6 +1771,7 @@ class _SplashScreenState extends State<SplashScreen>
 
     Future.delayed(const Duration(milliseconds: 3000), () {
       if (mounted) {
+        AdMobManager().showAppOpenAd();
         Navigator.of(context).pushReplacement(
           PageRouteBuilder(
             pageBuilder: (_, anim, __) =>
@@ -1602,6 +1999,8 @@ class _PreviewScreenState extends State<PreviewScreen> {
               left: 16,
               right: 16,
               child: Column(mainAxisSize: MainAxisSize.min, children: [
+                const BannerAdWidget(),
+                const SizedBox(height: 8),
                 GlassContainer(
                   opacity: 0.14,
                   padding: const EdgeInsets.all(18),
@@ -1789,23 +2188,27 @@ class _WallpaperGridLoaderState extends State<_WallpaperGridLoader> {
 
   void _navigateWithAd(WallpaperModel wallpaper, Object heroTag,
       List<WallpaperModel> wallpapers, int initialIndex) {
-    if (mounted) {
-      Navigator.push(
-        context,
-        PageRouteBuilder(
-          pageBuilder: (_, anim, __) => FadeTransition(
-            opacity: anim,
-            child: PreviewScreen(
-              wallpaper: wallpaper,
-              heroTag: heroTag,
-              wallpapers: wallpapers,
-              initialIndex: initialIndex,
+    AdMobManager().trackWallpaperView(
+      onAdComplete: () {
+        if (mounted) {
+          Navigator.push(
+            context,
+            PageRouteBuilder(
+              pageBuilder: (_, anim, __) => FadeTransition(
+                opacity: anim,
+                child: PreviewScreen(
+                  wallpaper: wallpaper,
+                  heroTag: heroTag,
+                  wallpapers: wallpapers,
+                  initialIndex: initialIndex,
+                ),
+              ),
+              transitionDuration: const Duration(milliseconds: 300),
             ),
-          ),
-          transitionDuration: const Duration(milliseconds: 300),
-        ),
-      );
-    }
+          );
+        }
+      },
+    );
   }
 
   @override
@@ -1840,6 +2243,7 @@ class _WallpaperGridLoaderState extends State<_WallpaperGridLoader> {
         }
         final wallpapers = snapshot.data!;
         return Column(children: [
+          const SmartBannerAdWidget(),
           Expanded(
             child: RefreshIndicator(
               onRefresh: () async => _refresh(),
@@ -1849,6 +2253,30 @@ class _WallpaperGridLoaderState extends State<_WallpaperGridLoader> {
                       padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
                       itemCount: wallpapers.length,
                       itemBuilder: (context, index) {
+                        if (index > 0 && index % 8 == 0) {
+                          return Column(children: [
+                            const Padding(
+                              padding: EdgeInsets.symmetric(vertical: 8),
+                              child: SmartBannerAdWidget(),
+                            ),
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 12),
+                              child: AspectRatio(
+                                aspectRatio: 16 / 9,
+                                child: WallpaperCard169(
+                                  wallpaper: wallpapers[index],
+                                  heroTag:
+                                      'wp_${wallpapers[index].id}_${widget.categoryName}_$index',
+                                  onTap: () => _navigateWithAd(
+                                      wallpapers[index],
+                                      'wp_${wallpapers[index].id}_${widget.categoryName}_$index',
+                                      wallpapers,
+                                      index),
+                                ),
+                              ),
+                            ),
+                          ]);
+                        }
                         return Padding(
                           padding: const EdgeInsets.only(bottom: 12),
                           child: AspectRatio(
@@ -1924,7 +2352,7 @@ class _WallpaperGridLoaderState extends State<_WallpaperGridLoader> {
 // 10. HOME SCREEN
 // =============================================================================
 class HomeScreen extends StatelessWidget {
-  const HomeScreen({Key? key}) : super(key: key);
+  const HomeScreen({super.key});
 
   void _navigateTo(BuildContext context, String category) {
     Navigator.push(
@@ -1959,6 +2387,12 @@ class HomeScreen extends StatelessWidget {
           ),
         ],
       ),
+      const SliverToBoxAdapter(
+        child: Padding(
+          padding: EdgeInsets.symmetric(vertical: 8),
+          child: Center(child: SmartBannerAdWidget()),
+        ),
+      ),
       _sectionHeader(context, 'New', 'New'),
       _horizontalList(context, 'New'),
       _sectionHeader(context, 'Sport', 'Sport'),
@@ -1969,6 +2403,12 @@ class HomeScreen extends StatelessWidget {
       _horizontalList(context, '16:9'),
       _sectionHeader(context, 'Best', 'Best'),
       _horizontalList(context, 'Best'),
+      const SliverToBoxAdapter(
+        child: Padding(
+          padding: EdgeInsets.symmetric(vertical: 8),
+          child: SmartBannerAdWidget(),
+        ),
+      ),
       ...MockData.categories.map((cat) => _categoryRow(context, cat)),
       const SliverToBoxAdapter(child: SizedBox(height: 100)),
     ]);
@@ -2003,8 +2443,8 @@ class HomeScreen extends StatelessWidget {
           ]),
           GestureDetector(
             onTap: () => _navigateTo(context, category),
-            child: Text('See All →',
-                style: GoogleFonts.poppins(
+            child: const Text('See All →',
+                style: TextStyle(
                     color: Colors.blueAccent,
                     fontWeight: FontWeight.w600,
                     fontSize: 14)),
@@ -2041,36 +2481,57 @@ class HomeScreen extends StatelessWidget {
           }
           final wallpapers = snapshot.data!;
 
-          final displayCount = wallpapers.length > 12 ? 12 : wallpapers.length;
+          // حساب عدد العناصر مع الإعلانات (كل 5 صور + إعلان واحد)
+          final baseCount = wallpapers.length > 12 ? 12 : wallpapers.length;
+          final totalCount = baseCount + (baseCount ~/ 5);
 
           return SizedBox(
             height: cardHeight,
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 16),
-              itemCount: displayCount,
+              itemCount: totalCount,
               separatorBuilder: (_, __) => const SizedBox(width: 12),
-              itemBuilder: (context, index) {
-                final heroTag = 'wp_${wallpapers[index].id}_${category}_$index';
+              itemBuilder: (context, displayIndex) {
+                // حساب الفهرس الفعلي للصورة
+                final adInterval = 6; // إعلان بعد كل 5 صور
+                int imageIndex = displayIndex - (displayIndex ~/ adInterval);
+
+                // إذا كان الفهرس يجب أن يكون إعلان
+                if (displayIndex % adInterval == 5) {
+                  return _adCard(cardWidth, cardHeight);
+                }
+
+                if (imageIndex >= baseCount) {
+                  return const SizedBox.shrink();
+                }
+
+                final heroTag =
+                    'wp_${wallpapers[imageIndex].id}_${category}_$imageIndex';
                 return WallpaperCard(
-                  wallpaper: wallpapers[index],
+                  wallpaper: wallpapers[imageIndex],
                   heroTag: heroTag,
                   width: cardWidth,
                   height: cardHeight,
                   onTap: () {
-                    Navigator.push(
-                      context,
-                      PageRouteBuilder(
-                        pageBuilder: (_, anim, __) => FadeTransition(
-                          opacity: anim,
-                          child: PreviewScreen(
-                              wallpaper: wallpapers[index],
-                              heroTag: heroTag,
-                              wallpapers: wallpapers,
-                              initialIndex: index),
-                        ),
-                        transitionDuration: const Duration(milliseconds: 300),
-                      ),
+                    AdMobManager().trackWallpaperView(
+                      onAdComplete: () {
+                        Navigator.push(
+                          context,
+                          PageRouteBuilder(
+                            pageBuilder: (_, anim, __) => FadeTransition(
+                              opacity: anim,
+                              child: PreviewScreen(
+                                  wallpaper: wallpapers[imageIndex],
+                                  heroTag: heroTag,
+                                  wallpapers: wallpapers,
+                                  initialIndex: imageIndex),
+                            ),
+                            transitionDuration:
+                                const Duration(milliseconds: 300),
+                          ),
+                        );
+                      },
                     );
                   },
                 );
@@ -2078,6 +2539,52 @@ class HomeScreen extends StatelessWidget {
             ),
           );
         },
+      ),
+    );
+  }
+
+  // بطاقة إعلان احترافية مع إعلان حقيقي
+  Widget _adCard(double width, double height) {
+    return Container(
+      width: width,
+      height: height,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: Colors.blueAccent.withValues(alpha: 0.3),
+          width: 1,
+        ),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            // خلفية الإعلان
+            Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    Colors.blueAccent.withValues(alpha: 0.1),
+                    Colors.cyanAccent.withValues(alpha: 0.05),
+                  ],
+                ),
+              ),
+            ),
+            // إعلان AdMob الحقيقي
+            Center(
+              child: SizedBox(
+                width: width * 0.9,
+                height: height * 0.8,
+                child: const BannerAdWidget(
+                  adSize: AdSize.banner,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -2258,6 +2765,7 @@ class FavoritesScreen extends StatelessWidget {
                 ),
             ],
           ),
+          const SliverToBoxAdapter(child: Center(child: BannerAdWidget())),
           if (favProvider.favorites.isEmpty)
             SliverFillRemaining(
               child: Center(
@@ -2356,6 +2864,12 @@ class CatalogScreen extends StatelessWidget {
                 fontSize: 24,
                 color: Colors.white)),
       ),
+      const SliverToBoxAdapter(
+        child: Padding(
+          padding: EdgeInsets.symmetric(vertical: 8),
+          child: Center(child: SmartBannerAdWidget()),
+        ),
+      ),
       SliverPadding(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
         sliver: SliverGrid(
@@ -2450,7 +2964,7 @@ class CatalogScreen extends StatelessWidget {
 // 12. SETTINGS SCREEN
 // =============================================================================
 class SettingsScreen extends StatelessWidget {
-  const SettingsScreen({Key? key}) : super(key: key);
+  const SettingsScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -2470,6 +2984,63 @@ class SettingsScreen extends StatelessWidget {
                 fontWeight: FontWeight.bold, color: Colors.white)),
       ),
       body: ListView(padding: const EdgeInsets.all(16), children: [
+        const Center(child: BannerAdWidget()),
+        const SizedBox(height: 16),
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.amber.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.amber.withValues(alpha: 0.3)),
+          ),
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.amber.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.star, color: Colors.amber, size: 20),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('احصل على مكافأة',
+                          style: GoogleFonts.poppins(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 14)),
+                      Text('شاهد إعلاناً للحصول على ميزة مميزة',
+                          style: GoogleFonts.poppins(
+                              color: Colors.grey[400], fontSize: 12)),
+                    ]),
+              ),
+            ]),
+            const SizedBox(height: 12),
+            RewardedAdButton(
+              label: '🎁 شاهد إعلاناً واحصل على مكافأة',
+              onRewardEarned: () {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('🎉 تم منح المكافأة!',
+                          style: GoogleFonts.poppins()),
+                      backgroundColor: Colors.amber[700],
+                      behavior: SnackBarBehavior.floating,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                    ),
+                  );
+                }
+              },
+            ),
+          ]),
+        ),
+        const SizedBox(height: 12),
         _SettingsTile(
           icon: Icons.delete_sweep,
           iconColor: Colors.orange,
@@ -2738,7 +3309,7 @@ class MockData {
           accentColor: Colors.orange,
         ),
         CategoryModel(
-          name: 'Sport',
+          name: 'sport',
           repository: 'sport',
           icon: Icons.sports,
           accentColor: Colors.green,
@@ -2988,6 +3559,12 @@ void main() async {
       statusBarIconBrightness: Brightness.light,
     ),
   );
+
+  try {
+    await AdMobManager().initialize();
+  } catch (e) {
+    AppLogger.error('AdMob initialization failed: $e');
+  }
 
   final favProvider = FavoritesProvider();
   final privacyProvider = PrivacyProvider();
