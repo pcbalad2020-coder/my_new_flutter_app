@@ -9,6 +9,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:saver_gallery/saver_gallery.dart';
+import 'package:flutter_wallpaper_manager/flutter_wallpaper_manager.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'dart:convert';
 import 'dart:math';
@@ -720,6 +721,40 @@ class DownloadService {
     if (status.isPermanentlyDenied && context.mounted) openAppSettings();
     return false;
   }
+
+  // تعيين الخلفية
+  static Future<void> setWallpaper(
+    BuildContext context,
+    WallpaperModel wallpaper,
+  ) async {
+    final hasPermission = await _requestStoragePermission(context);
+    if (!hasPermission) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ يحتاج التطبيق إلى إذن الصور لتعيين الخلفية',
+                style: GoogleFonts.poppins()),
+            backgroundColor: Colors.orange[800],
+            duration: const Duration(seconds: 4),
+            action: SnackBarAction(
+              label: 'الإعدادات',
+              textColor: Colors.white,
+              onPressed: () => openAppSettings(),
+            ),
+          ),
+        );
+      }
+      return;
+    }
+
+    if (context.mounted) {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => _SetWallpaperDialog(wallpaper: wallpaper),
+      );
+    }
+  }
 }
 
 class _DownloadProgressDialog extends StatefulWidget {
@@ -823,6 +858,163 @@ class _DownloadProgressDialogState extends State<_DownloadProgressDialog> {
               backgroundColor: Colors.grey[800],
               valueColor:
                   const AlwaysStoppedAnimation<Color>(Colors.blueAccent),
+              borderRadius: BorderRadius.circular(8),
+              minHeight: 8,
+            )
+          else
+            Container(
+              height: 8,
+              decoration: BoxDecoration(
+                color: _done ? Colors.green : Colors.red,
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              if (_done)
+                const Icon(Icons.check_circle, color: Colors.green, size: 18),
+              if (_error) const Icon(Icons.error, color: Colors.red, size: 18),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  _done || _error
+                      ? _status
+                      : '${(_progress * 100).toStringAsFixed(0)}%',
+                  style: GoogleFonts.poppins(
+                    color: _done
+                        ? Colors.green
+                        : (_error ? Colors.red : Colors.white70),
+                    fontSize: 13,
+                  ),
+                  textAlign: TextAlign.center,
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 2,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// =============================================================================
+// 🖼️ SET WALLPAPER DIALOG
+// =============================================================================
+class _SetWallpaperDialog extends StatefulWidget {
+  final WallpaperModel wallpaper;
+  const _SetWallpaperDialog({required this.wallpaper});
+  @override
+  State<_SetWallpaperDialog> createState() => _SetWallpaperDialogState();
+}
+
+class _SetWallpaperDialogState extends State<_SetWallpaperDialog> {
+  double _progress = 0;
+  String _status = 'جاري التحميل...';
+  bool _done = false;
+  bool _error = false;
+  int _selectedOption = 0; // 0 = home, 1 = lock, 2 = both
+
+  @override
+  void initState() {
+    super.initState();
+    _setWallpaper();
+  }
+
+  Future<void> _setWallpaper() async {
+    try {
+      final tempDir = await getTemporaryDirectory();
+      final safeTitle =
+          widget.wallpaper.title.replaceAll(RegExp(r'[^\w\u0600-\u06FF]'), '_');
+      final fileName =
+          '${safeTitle}_${DateTime.now().millisecondsSinceEpoch}.jpg';
+      final savePath = '${tempDir.path}/$fileName';
+
+      final dio = Dio(BaseOptions(
+        connectTimeout: const Duration(seconds: 20),
+        receiveTimeout: const Duration(seconds: 120),
+      ));
+
+      await dio.download(
+        widget.wallpaper.imageUrl,
+        savePath,
+        onReceiveProgress: (received, total) {
+          if (total != -1 && mounted) {
+            setState(() => _progress = received / total * 0.5);
+          }
+        },
+      );
+
+      // تعيين الخلفية
+      if (!mounted) return;
+
+      setState(() {
+        _progress = 0.5;
+        _status = 'جاري تعيين الخلفية...';
+      });
+
+      final file = File(savePath);
+
+      // تعيين الخلفية على الشاشة الرئيسية
+      await WallpaperManager.setWallpaperFromFile(
+        savePath,
+        WallpaperManager.HOME_SCREEN,
+      );
+
+      if (mounted) {
+        setState(() {
+          _progress = 1.0;
+          _done = true;
+          _status = 'تم تعيين الخلفية بنجاح ✅';
+        });
+      }
+
+      // حذف الملف المؤقت
+      if (await file.exists()) await file.delete();
+
+      await Future.delayed(const Duration(seconds: 2));
+      if (mounted) Navigator.of(context).pop();
+    } catch (e) {
+      AppLogger.error('Error setting wallpaper: $e');
+      if (mounted) {
+        setState(() {
+          _error = true;
+          _status = 'خطأ: $e';
+        });
+        await Future.delayed(const Duration(seconds: 3));
+        if (mounted) Navigator.of(context).pop();
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: const Color(0xFF1A2533),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      title: Text(
+        _done ? 'تم التعيين!' : (_error ? 'خطأ' : 'جاري التعيين'),
+        style: GoogleFonts.poppins(
+          color: Colors.white,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(widget.wallpaper.title,
+              style: GoogleFonts.poppins(color: Colors.grey[400], fontSize: 12),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis),
+          const SizedBox(height: 20),
+          if (!_done && !_error)
+            LinearProgressIndicator(
+              value: _progress == 0 ? null : _progress,
+              backgroundColor: Colors.grey[800],
+              valueColor: const AlwaysStoppedAnimation<Color>(Colors.green),
               borderRadius: BorderRadius.circular(8),
               minHeight: 8,
             )
