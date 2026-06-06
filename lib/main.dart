@@ -1521,7 +1521,7 @@ class WallpaperCard169 extends StatelessWidget {
 // 6. PRIVACY SCREENS
 // =============================================================================
 class PrivacyPolicyScreen extends StatelessWidget {
-  const PrivacyPolicyScreen({Key? key}) : super(key: key);
+  const PrivacyPolicyScreen({super.key});
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -1587,7 +1587,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
 }
 
 class PrivacyPolicyDialog extends StatefulWidget {
-  const PrivacyPolicyDialog({Key? key}) : super(key: key);
+  const PrivacyPolicyDialog({super.key});
   @override
   State<PrivacyPolicyDialog> createState() => _PrivacyPolicyDialogState();
 }
@@ -1894,12 +1894,12 @@ class PreviewScreen extends StatefulWidget {
   final int initialIndex;
 
   const PreviewScreen({
-    Key? key,
+    super.key,
     required this.wallpaper,
     required this.heroTag,
     required this.wallpapers,
     required this.initialIndex,
-  }) : super(key: key);
+  });
 
   @override
   State<PreviewScreen> createState() => _PreviewScreenState();
@@ -2133,8 +2133,7 @@ class _ActionButton extends StatelessWidget {
 // =============================================================================
 class CategoryWallpapersScreen extends StatelessWidget {
   final String categoryName;
-  const CategoryWallpapersScreen({Key? key, required this.categoryName})
-      : super(key: key);
+  const CategoryWallpapersScreen({super.key, required this.categoryName});
 
   @override
   Widget build(BuildContext context) {
@@ -2494,7 +2493,7 @@ class HomeScreen extends StatelessWidget {
               separatorBuilder: (_, __) => const SizedBox(width: 12),
               itemBuilder: (context, displayIndex) {
                 // حساب الفهرس الفعلي للصورة
-                final adInterval = 6; // إعلان بعد كل 5 صور
+                const int adInterval = 6; // إعلان بعد كل 5 صور
                 int imageIndex = displayIndex - (displayIndex ~/ adInterval);
 
                 // إذا كان الفهرس يجب أن يكون إعلان
