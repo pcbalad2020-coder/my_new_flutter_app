@@ -7,7 +7,6 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	
-	<!-- ✅ تم التعديل: الاسم الظاهر للمستخدم -->
 	<key>CFBundleDisplayName</key>
 	<string>4K خلفيات</string>
 	
@@ -18,7 +17,6 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	
-	<!-- ✅ تم التعديل: الاسم الداخلي (بدون مسافات) -->
 	<key>CFBundleName</key>
 	<string>4K خلفيات</string>
 	
@@ -76,7 +74,7 @@
 	<!-- ✅ Permissions for accessing phone photos -->
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>نحتاج الوصول إلى معرض الصور لتحميل الصور</string>
-	<key>NSPhotoLibraryAddOnlyUsageDescription</key>
+	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>نحتاج الوصول إلى معرض الصور لحفظ الصور</string>
 	
 	<!-- ✅ Google AdMob Configuration -->

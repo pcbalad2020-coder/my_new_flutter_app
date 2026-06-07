@@ -1,5 +1,5 @@
 name: km2apps
-description: تطبيق خلفيات عالي الجودة من GitHub
+description: تطبيق خلفيات عالي الجودة 
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -10,7 +10,7 @@ version: 1.0.0+1
 dependencies:
   flutter:
     sdk: flutter
-  
+
   provider: ^6.1.1
   google_mobile_ads: ^5.1.0
   cached_network_image: ^3.3.1
@@ -22,6 +22,7 @@ dependencies:
   shared_preferences: ^2.2.2
   permission_handler: ^11.2.0
   saver_gallery: ^3.0.6
+  image_gallery_saver: ^2.0.3
   share_plus: ^9.0.0
   device_info_plus: ^10.1.0
   flutter_wallpaper_manager: ^0.0.3
@@ -36,7 +37,7 @@ flutter_launcher_icons:
   android: "launcher_icon"
   ios: true
   image_path: "assets/icon.png"
-  adaptive_icon_background: "#FFFFFF" 
+  adaptive_icon_background: "#FFFFFF"
   adaptive_icon_foreground: "assets/icon.png"
 
 flutter:
