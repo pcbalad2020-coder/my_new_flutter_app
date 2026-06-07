@@ -219,14 +219,6 @@ packages:
     description: flutter
     source: sdk
     version: "0.0.0"
-  flutter_wallpaper_manager:
-    dependency: "direct main"
-    description:
-      name: flutter_wallpaper_manager
-      sha256: "369f63c6fdb4515477ced545e39581fb3d56afcdde8bcb9ba8a58d42c2dd1c9c"
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.0.4"
   flutter_web_plugins:
     dependency: transitive
     description: flutter
@@ -280,14 +272,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "4.8.0"
-  image_gallery_saver:
-    dependency: "direct main"
-    description:
-      name: image_gallery_saver
-      sha256: "0aba74216a4d9b0561510cb968015d56b701ba1bd94aace26aacdd8ae5761816"
-      url: "https://pub.dev"
-    source: hosted
-    version: "2.0.3"
   jni:
     dependency: transitive
     description:

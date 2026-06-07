@@ -22,10 +22,8 @@ dependencies:
   shared_preferences: ^2.2.2
   permission_handler: ^11.2.0
   saver_gallery: ^3.0.6
-  image_gallery_saver: ^2.0.3
   share_plus: ^9.0.0
   device_info_plus: ^10.1.0
-  flutter_wallpaper_manager: ^0.0.3
 
 dev_dependencies:
   flutter_test:
