@@ -704,7 +704,9 @@ class DownloadService {
   static Future<bool> _requestStoragePermission(BuildContext context) async {
     if (Platform.isIOS) {
       final status = await Permission.photos.request();
-      return status.isGranted;
+      if (status.isGranted || status.isLimited) return true;
+      if (status.isPermanentlyDenied && context.mounted) openAppSettings();
+      return false;
     }
     final deviceInfo = DeviceInfoPlugin();
     final androidInfo = await deviceInfo.androidInfo;
@@ -921,71 +923,53 @@ class _SetWallpaperDialogState extends State<_SetWallpaperDialog> {
   @override
   void initState() {
     super.initState();
-    _setWallpaper();
+    _setWallpaper(context, widget.wallpaper);
   }
 
-  Future<void> _setWallpaper() async {
+  Future<void> _setWallpaper(
+      BuildContext context, WallpaperModel wallpaper) async {
+    final tempDir = await getTemporaryDirectory();
+    final filePath = '${tempDir.path}/${wallpaper.id}.jpg';
+
     try {
-      final tempDir = await getTemporaryDirectory();
-      final safeTitle =
-          widget.wallpaper.title.replaceAll(RegExp(r'[^\w\u0600-\u06FF]'), '_');
-      final fileName =
-          '${safeTitle}_${DateTime.now().millisecondsSinceEpoch}.jpg';
-      final savePath = '${tempDir.path}/$fileName';
-
-      final dio = Dio(BaseOptions(
-        connectTimeout: const Duration(seconds: 20),
-        receiveTimeout: const Duration(seconds: 120),
-      ));
-
-      await dio.download(
-        widget.wallpaper.imageUrl,
-        savePath,
-        onReceiveProgress: (received, total) {
-          if (total != -1 && mounted) {
-            setState(() => _progress = received / total * 0.5);
-          }
-        },
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('جاري تعيين الخلفية...', style: GoogleFonts.poppins()),
+          duration: const Duration(seconds: 2),
+          behavior: SnackBarBehavior.floating,
+        ),
       );
 
-      // تعيين الخلفية
-      if (!mounted) return;
+      await Dio().download(wallpaper.imageUrl, filePath);
 
-      setState(() {
-        _progress = 0.5;
-        _status = 'جاري تعيين الخلفية...';
-      });
-
-      final file = File(savePath);
-
-      // تعيين الخلفية على الشاشة الرئيسية
-      await WallpaperManager.setWallpaperFromFile(
-        savePath,
-        WallpaperManager.HOME_SCREEN,
+      final result = await WallpaperManager.setWallpaperFromFile(
+        filePath,
+        WallpaperManager.BOTH_SCREEN,
       );
 
-      if (mounted) {
-        setState(() {
-          _progress = 1.0;
-          _done = true;
-          _status = 'تم تعيين الخلفية بنجاح ✅';
-        });
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+                result ? '✅ تم تعيين الخلفية بنجاح!' : '❌ فشل التعيين',
+                style: GoogleFonts.poppins()),
+            backgroundColor: result ? Colors.green[700] : Colors.red[700],
+            behavior: SnackBarBehavior.floating,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        );
       }
-
-      // حذف الملف المؤقت
-      if (await file.exists()) await file.delete();
-
-      await Future.delayed(const Duration(seconds: 2));
-      if (mounted) Navigator.of(context).pop();
     } catch (e) {
-      AppLogger.error('Error setting wallpaper: $e');
-      if (mounted) {
-        setState(() {
-          _error = true;
-          _status = 'خطأ: $e';
-        });
-        await Future.delayed(const Duration(seconds: 3));
-        if (mounted) Navigator.of(context).pop();
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content:
+                Text('حدث خطأ: $e', style: GoogleFonts.poppins(fontSize: 11)),
+            backgroundColor: Colors.red[700],
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
       }
     }
   }
@@ -1256,7 +1240,7 @@ class PermissionsInitializer {
   static Future<bool> _checkAndRequest() async {
     if (Platform.isIOS) {
       final status = await Permission.photos.request();
-      return status.isGranted;
+      return status.isGranted || status.isLimited;
     }
     final deviceInfo = DeviceInfoPlugin();
     final androidInfo = await deviceInfo.androidInfo;
@@ -2115,6 +2099,51 @@ class _PreviewScreenState extends State<PreviewScreen> {
     super.dispose();
   }
 
+  Future<void> _setWallpaper(
+      BuildContext context, WallpaperModel wallpaper) async {
+    final tempDir = await getTemporaryDirectory();
+    final filePath = '${tempDir.path}/${wallpaper.id}.jpg';
+    try {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('جاري تعيين الخلفية...', style: GoogleFonts.poppins()),
+          duration: const Duration(seconds: 2),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      await Dio().download(wallpaper.imageUrl, filePath);
+      final result = await WallpaperManager.setWallpaperFromFile(
+        filePath,
+        WallpaperManager.BOTH_SCREEN,
+      );
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              result ? '✅ تم تعيين الخلفية بنجاح!' : '❌ فشل التعيين',
+              style: GoogleFonts.poppins(),
+            ),
+            backgroundColor: result ? Colors.green[700] : Colors.red[700],
+            behavior: SnackBarBehavior.floating,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content:
+                Text('حدث خطأ: $e', style: GoogleFonts.poppins(fontSize: 11)),
+            backgroundColor: Colors.red[700],
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -2250,16 +2279,7 @@ class _PreviewScreenState extends State<PreviewScreen> {
                           icon: Icons.wallpaper,
                           label: 'تعيين',
                           color: Colors.green,
-                          onTap: () =>
-                              ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('يحتاج flutter_wallpaper_manager',
-                                  style: GoogleFonts.poppins(fontSize: 12)),
-                              behavior: SnackBarBehavior.floating,
-                              shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12)),
-                            ),
-                          ),
+                          onTap: () => _setWallpaper(context, wallpaper),
                         ),
                       ),
                     ]),
