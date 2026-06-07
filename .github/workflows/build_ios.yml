@@ -39,7 +39,6 @@ jobs:
         if [ -f "$SPM_FILE" ]; then
           sed -i '' 's/static bool isSwiftPackageManagerEnabled/\/\/ static bool isSwiftPackageManagerEnabled/' "$SPM_FILE" || true
         fi
-        # تعطيل SPM عبر ملف الإعدادات
         mkdir -p ~/.config/flutter
         echo '{"enable-swift-package-manager": false}' > ~/.config/flutter/settings.json
         cat ~/.config/flutter/settings.json
@@ -55,7 +54,8 @@ jobs:
 
     - name: Build IPA for Sideloading
       run: |
-        flutter build ios --release --no-codesign
+        flutter build ios --release --no-codesign \
+          --dart-define=GITHUB_TOKEN=${{ secrets.GH_TOKEN }}
         mkdir -p build/ios/iphoneos/Payload
         mv build/ios/iphoneos/Runner.app build/ios/iphoneos/Payload/
         cd build/ios/iphoneos

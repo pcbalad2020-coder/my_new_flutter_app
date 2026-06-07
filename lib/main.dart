@@ -490,7 +490,11 @@ class GitHubService {
   static const String _owner = 'pcbalad2020-coder';
   static const String _branch = 'main';
 
-  // ⚠️ تم حذف التوكن نهائياً - المستودعات يجب أن تكون Public
+  // ✅ التوكن من dart-define - آمن ومخفي
+  static const String _token = String.fromEnvironment(
+    'GITHUB_TOKEN',
+    defaultValue: '',
+  );
 
   static const Map<String, String> repositories = {
     'All Images': 'All-images',
@@ -510,7 +514,7 @@ class GitHubService {
   static final Map<String, DateTime> _cacheTimestamps = {};
   static const Duration _cacheDuration = Duration(hours: 2);
 
-  // ✅ عميل Dio بدون توكن - للمستودعات العامة
+  // ✅ Dio مع التوكن
   static final Dio _dio = Dio(BaseOptions(
     baseUrl: 'https://api.github.com',
     connectTimeout: const Duration(seconds: 20),
@@ -518,7 +522,7 @@ class GitHubService {
     headers: {
       'Accept': 'application/vnd.github.v3+json',
       'User-Agent': 'KM2-Wallpaper-App/1.1.0',
-      // ⚠️ لا يوجد Authorization header
+      if (_token.isNotEmpty) 'Authorization': 'Bearer $_token',
     },
   ));
 
