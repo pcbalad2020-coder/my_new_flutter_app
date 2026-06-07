@@ -484,13 +484,11 @@ class CategoryModel {
 }
 
 // =============================================================================
-// 2. GITHUB SERVICE — ✅ بدون توكن (للمستودعات العامة فقط)
+// 2. (للمستودعات العامة فقط)
 // =============================================================================
 class GitHubService {
   static const String _owner = 'pcbalad2020-coder';
   static const String _branch = 'main';
-
-  // ⚠️ تم حذف التوكن نهائياً - المستودعات يجب أن تكون Public
 
   static const Map<String, String> repositories = {
     'All Images': 'All-images',
