@@ -39,6 +39,12 @@ post_install do |installer|
       config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '13.0'
       config.build_settings['BUILD_LIBRARY_FOR_DISTRIBUTION'] = 'NO'
       config.build_settings['SWIFT_VERSION'] = '5.0'
+      
+      # ✅ تفعيل إذن الصور
+      config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] ||= [
+        '$(inherited)',
+        'PERMISSION_PHOTOS=1',
+      ]
     end
   end
 end
