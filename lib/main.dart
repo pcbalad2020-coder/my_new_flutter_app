@@ -747,14 +747,6 @@ class DownloadService {
       }
       return;
     }
-
-    if (context.mounted) {
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (_) => _SetWallpaperDialog(wallpaper: wallpaper),
-      );
-    }
   }
 }
 
@@ -905,87 +897,6 @@ class _DownloadProgressDialogState extends State<_DownloadProgressDialog> {
 // =============================================================================
 // 🖼️ SET WALLPAPER DIALOG
 // =============================================================================
-class _SetWallpaperDialog extends StatefulWidget {
-  final WallpaperModel wallpaper;
-  const _SetWallpaperDialog({required this.wallpaper});
-  @override
-  State<_SetWallpaperDialog> createState() => _SetWallpaperDialogState();
-}
-
-class _SetWallpaperDialogState extends State<_SetWallpaperDialog> {
-  double _progress = 0;
-  String _status = 'جاري التحميل...';
-  bool _done = false;
-  bool _error = false;
-  int _selectedOption = 0; // 0 = home, 1 = lock, 2 = both
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      backgroundColor: const Color(0xFF1A2533),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      title: Text(
-        _done ? 'تم التعيين!' : (_error ? 'خطأ' : 'جاري التعيين'),
-        style: GoogleFonts.poppins(
-          color: Colors.white,
-          fontWeight: FontWeight.bold,
-        ),
-      ),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(widget.wallpaper.title,
-              style: GoogleFonts.poppins(color: Colors.grey[400], fontSize: 12),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis),
-          const SizedBox(height: 20),
-          if (!_done && !_error)
-            LinearProgressIndicator(
-              value: _progress == 0 ? null : _progress,
-              backgroundColor: Colors.grey[800],
-              valueColor: const AlwaysStoppedAnimation<Color>(Colors.green),
-              borderRadius: BorderRadius.circular(8),
-              minHeight: 8,
-            )
-          else
-            Container(
-              height: 8,
-              decoration: BoxDecoration(
-                color: _done ? Colors.green : Colors.red,
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-          const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              if (_done)
-                const Icon(Icons.check_circle, color: Colors.green, size: 18),
-              if (_error) const Icon(Icons.error, color: Colors.red, size: 18),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  _done || _error
-                      ? _status
-                      : '${(_progress * 100).toStringAsFixed(0)}%',
-                  style: GoogleFonts.poppins(
-                    color: _done
-                        ? Colors.green
-                        : (_error ? Colors.red : Colors.white70),
-                    fontSize: 13,
-                  ),
-                  textAlign: TextAlign.center,
-                  overflow: TextOverflow.ellipsis,
-                  maxLines: 2,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
 
 // =============================================================================
 // 4. STATE MANAGEMENT
