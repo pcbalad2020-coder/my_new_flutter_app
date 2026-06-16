@@ -32,43 +32,48 @@ class AppLogger {
 // 0. ADMOB SERVICE — خدمة إدارة جميع أنواع الإعلانات
 // =============================================================================
 class AdMobIds {
+  // 1. إعلان البانر (Banner Ad)
   static String get bannerAdUnitId {
     if (Platform.isAndroid) {
-      return 'ca-app-pub-3064608249204898/9864859917';
+      return 'ca-app-pub-4756404048214956/3103410719'; // كود الأندرويد الخاص بك
     } else {
-      return 'ca-app-pub-3940256099942544/2934735716';
+      return 'ca-app-pub-3940256099942544/2934735716'; // الكود التجريبي للآيفون ✅
     }
   }
 
+  // 2. الإعلان البيني الشامل (Interstitial Ad)
   static String get interstitialAdUnitId {
     if (Platform.isAndroid) {
-      return 'ca-app-pub-3064608249204898/8864361091';
+      return 'ca-app-pub-4756404048214956/7589450639'; // كود الأندرويد الخاص بك
     } else {
-      return 'ca-app-pub-3940256099942544/4411468910';
+      return 'ca-app-pub-3940256099942544/4411468910'; // الكود التجريبي للآيفون ✅
     }
   }
 
+  // 3. الإعلان بمكافأة (Rewarded Ad)
   static String get rewardedAdUnitId {
     if (Platform.isAndroid) {
-      return 'ca-app-pub-3940256099942544/5224354917';
+      return 'ca-app-pub-4756404048214956/8168076692';
     } else {
-      return 'ca-app-pub-3940256099942544/1712485313';
+      return 'ca-app-pub-3940256099942544/1712485313'; // الكود التجريبي للآيفون ✅
     }
   }
 
+  // 4. الإعلان المدمج (Native Ad Advanced)
   static String get nativeAdUnitId {
     if (Platform.isAndroid) {
-      return 'ca-app-pub-3064608249204898/3617343236';
+      return 'ca-app-pub-4756404048214956/2620236541';
     } else {
-      return 'ca-app-pub-3940256099942544/3986624511';
+      return 'ca-app-pub-3940256099942544/3986624511'; // الكود التجريبي للآيفون ✅
     }
   }
 
+  // 5. إعلان فتح التطبيق (App Open Ad)
   static String get appOpenAdUnitId {
     if (Platform.isAndroid) {
-      return 'ca-app-pub-3064608249204898/7140215889';
+      return 'ca-app-pub-4756404048214956/7070617440';
     } else {
-      return 'ca-app-pub-3940256099942544/5575463023';
+      return 'ca-app-pub-3940256099942544/5575463023'; // الكود التجريبي للآيفون ✅
     }
   }
 }
