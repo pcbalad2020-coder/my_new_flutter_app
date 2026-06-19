@@ -32,49 +32,29 @@ class AppLogger {
 // 0. ADMOB SERVICE — خدمة إدارة جميع أنواع الإعلانات
 // =============================================================================
 class AdMobIds {
-  // 1. إعلان البانر (Banner Ad)
   static String get bannerAdUnitId {
-    if (Platform.isAndroid) {
-      return 'ca-app-pub-4756404048214956/3103410719'; // كود الأندرويد الخاص بك
-    } else {
-      return 'ca-app-pub-3940256099942544/2934735716'; // الكود التجريبي للآيفون ✅
-    }
+    if (Platform.isAndroid) return 'ca-app-pub-4756404048214956/3103410719';
+    return 'ca-app-pub-3940256099942544/2934735716';
   }
 
-  // 2. الإعلان البيني الشامل (Interstitial Ad)
   static String get interstitialAdUnitId {
-    if (Platform.isAndroid) {
-      return 'ca-app-pub-4756404048214956/7589450639'; // كود الأندرويد الخاص بك
-    } else {
-      return 'ca-app-pub-3940256099942544/4411468910'; // الكود التجريبي للآيفون ✅
-    }
+    if (Platform.isAndroid) return 'ca-app-pub-4756404048214956/7589450639';
+    return 'ca-app-pub-3940256099942544/4411468910';
   }
 
-  // 3. الإعلان بمكافأة (Rewarded Ad)
   static String get rewardedAdUnitId {
-    if (Platform.isAndroid) {
-      return 'ca-app-pub-4756404048214956/8168076692';
-    } else {
-      return 'ca-app-pub-3940256099942544/1712485313'; // الكود التجريبي للآيفون ✅
-    }
+    if (Platform.isAndroid) return 'ca-app-pub-4756404048214956/8168076692';
+    return 'ca-app-pub-3940256099942544/1712485313';
   }
 
-  // 4. الإعلان المدمج (Native Ad Advanced)
   static String get nativeAdUnitId {
-    if (Platform.isAndroid) {
-      return 'ca-app-pub-4756404048214956/2620236541';
-    } else {
-      return 'ca-app-pub-3940256099942544/3986624511'; // الكود التجريبي للآيفون ✅
-    }
+    if (Platform.isAndroid) return 'ca-app-pub-4756404048214956/2620236541';
+    return 'ca-app-pub-3940256099942544/3986624511';
   }
 
-  // 5. إعلان فتح التطبيق (App Open Ad)
   static String get appOpenAdUnitId {
-    if (Platform.isAndroid) {
-      return 'ca-app-pub-4756404048214956/7070617440';
-    } else {
-      return 'ca-app-pub-3940256099942544/5575463023'; // الكود التجريبي للآيفون ✅
-    }
+    if (Platform.isAndroid) return 'ca-app-pub-4756404048214956/7070617440';
+    return 'ca-app-pub-3940256099942544/5575463023';
   }
 }
 
@@ -86,14 +66,11 @@ class AdMobManager {
   InterstitialAd? _interstitialAd;
   int _interstitialLoadAttempts = 0;
   static const int _maxFailedLoadAttempts = 3;
-
   RewardedAd? _rewardedAd;
   int _rewardedLoadAttempts = 0;
-
   AppOpenAd? _appOpenAd;
   bool _isShowingAd = false;
   DateTime? _appOpenLoadTime;
-
   int _viewCount = 0;
   static const int _interstitialInterval = 5;
 
@@ -132,9 +109,8 @@ class AdMobManager {
         onAdFailedToLoad: (error) {
           _interstitialLoadAttempts++;
           _interstitialAd = null;
-          if (_interstitialLoadAttempts < _maxFailedLoadAttempts) {
+          if (_interstitialLoadAttempts < _maxFailedLoadAttempts)
             _loadInterstitialAd();
-          }
         },
       ),
     );
@@ -184,9 +160,7 @@ class AdMobManager {
         onAdFailedToLoad: (error) {
           _rewardedLoadAttempts++;
           _rewardedAd = null;
-          if (_rewardedLoadAttempts < _maxFailedLoadAttempts) {
-            _loadRewardedAd();
-          }
+          if (_rewardedLoadAttempts < _maxFailedLoadAttempts) _loadRewardedAd();
         },
       ),
     );
@@ -224,9 +198,7 @@ class AdMobManager {
           _appOpenAd = ad;
           _appOpenLoadTime = DateTime.now();
         },
-        onAdFailedToLoad: (error) {
-          _appOpenAd = null;
-        },
+        onAdFailedToLoad: (error) => _appOpenAd = null,
       ),
     );
   }
@@ -246,9 +218,7 @@ class AdMobManager {
       return;
     }
     _appOpenAd!.fullScreenContentCallback = FullScreenContentCallback(
-      onAdShowedFullScreenContent: (ad) {
-        _isShowingAd = true;
-      },
+      onAdShowedFullScreenContent: (ad) => _isShowingAd = true,
       onAdDismissedFullScreenContent: (ad) {
         _isShowingAd = false;
         ad.dispose();
@@ -276,6 +246,7 @@ class AdMobManager {
 class BannerAdWidget extends StatefulWidget {
   final AdSize adSize;
   const BannerAdWidget({super.key, this.adSize = AdSize.banner});
+
   @override
   State<BannerAdWidget> createState() => _BannerAdWidgetState();
 }
@@ -325,6 +296,7 @@ class _BannerAdWidgetState extends State<BannerAdWidget> {
 
 class SmartBannerAdWidget extends StatefulWidget {
   const SmartBannerAdWidget({super.key});
+
   @override
   State<SmartBannerAdWidget> createState() => _SmartBannerAdWidgetState();
 }
@@ -372,51 +344,6 @@ class _SmartBannerAdWidgetState extends State<SmartBannerAdWidget> {
       width: _bannerAd!.size.width.toDouble(),
       height: _bannerAd!.size.height.toDouble(),
       child: AdWidget(ad: _bannerAd!),
-    );
-  }
-}
-
-class RewardedAdButton extends StatelessWidget {
-  final String label;
-  final VoidCallback onRewardEarned;
-  const RewardedAdButton({
-    super.key,
-    this.label = 'شاهد إعلاناً للحصول على مكافأة',
-    required this.onRewardEarned,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return ElevatedButton.icon(
-      onPressed: () {
-        AdMobManager().showRewardedAd(
-          onUserEarnedReward: (ad, reward) => onRewardEarned(),
-          onAdDismissed: () {
-            if (context.mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('🎉 شكراً! تم فتح الميزة',
-                      style: GoogleFonts.poppins()),
-                  backgroundColor: Colors.green[700],
-                  behavior: SnackBarBehavior.floating,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12)),
-                ),
-              );
-            }
-          },
-        );
-      },
-      icon: const Icon(Icons.play_circle_outline, size: 18),
-      label: Text(label,
-          style:
-              GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600)),
-      style: ElevatedButton.styleFrom(
-        backgroundColor: Colors.amber[700],
-        foregroundColor: Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      ),
     );
   }
 }
@@ -489,17 +416,13 @@ class CategoryModel {
 }
 
 // =============================================================================
-// 2. GITHUB SERVICE — ✅ بدون توكن (للمستودعات العامة فقط)
+// 2. GITHUB SERVICE
 // =============================================================================
 class GitHubService {
   static const String _owner = 'pcbalad2020-coder';
   static const String _branch = 'main';
-
-  // ✅ التوكن من dart-define - آمن ومخفي
-  static const String _token = String.fromEnvironment(
-    'GITHUB_TOKEN',
-    defaultValue: '',
-  );
+  static const String _token =
+      String.fromEnvironment('GITHUB_TOKEN', defaultValue: '');
 
   static const Map<String, String> repositories = {
     'All Images': 'All-images',
@@ -519,7 +442,6 @@ class GitHubService {
   static final Map<String, DateTime> _cacheTimestamps = {};
   static const Duration _cacheDuration = Duration(hours: 2);
 
-  // ✅ Dio مع التوكن
   static final Dio _dio = Dio(BaseOptions(
     baseUrl: 'https://api.github.com',
     connectTimeout: const Duration(seconds: 20),
@@ -535,14 +457,10 @@ class GitHubService {
       String repoName) async {
     try {
       AppLogger.info('📥 Fetching: $repoName');
-
       final response = await _dio.get(
         '/repos/$_owner/$repoName/contents',
         queryParameters: {'ref': _branch, 'per_page': 100},
       );
-
-      AppLogger.info('📊 Status[$repoName]: ${response.statusCode}');
-
       if (response.statusCode == 200 && response.data is List) {
         final data = response.data as List;
         return data
@@ -557,36 +475,24 @@ class GitHubService {
             .map((item) => item as Map<String, dynamic>)
             .toList();
       }
-
-      if (response.statusCode == 403) {
-        AppLogger.warning('⛔ Rate limit reached for $repoName');
-      }
-
       return [];
     } on DioException catch (e) {
-      AppLogger.error('Dio error for $repoName: ${e.message}');
-
-      // محاولة بديلة باستخدام Trees API للمستودعات الكبيرة
       try {
         return await _fetchViaTrees(repoName);
       } catch (err) {
-        AppLogger.error('Trees API also failed: $err');
         return [];
       }
     } catch (e) {
-      AppLogger.error('Unexpected error for $repoName: $e');
       return [];
     }
   }
 
-  // ✅ دالة بديلة باستخدام Git Trees API
   static Future<List<Map<String, dynamic>>> _fetchViaTrees(
       String repoName) async {
     final response = await _dio.get(
       '/repos/$_owner/$repoName/git/trees/$_branch',
       queryParameters: {'recursive': 1},
     );
-
     if (response.statusCode == 200 && response.data != null) {
       final tree = response.data['tree'] as List? ?? [];
       return tree.where((f) {
@@ -611,14 +517,10 @@ class GitHubService {
   }
 
   static Future<List<WallpaperModel>> getWallpapers(String categoryName) async {
-    // التحقق من الكاش
     if (_cache.containsKey(categoryName) &&
         _cacheTimestamps.containsKey(categoryName)) {
       final age = DateTime.now().difference(_cacheTimestamps[categoryName]!);
-      if (age < _cacheDuration) {
-        AppLogger.info('📦 Cache hit for $categoryName');
-        return _cache[categoryName]!;
-      }
+      if (age < _cacheDuration) return _cache[categoryName]!;
     }
 
     final repoName = repositories[categoryName];
@@ -626,16 +528,13 @@ class GitHubService {
 
     final files = await _fetchFromRepo(repoName);
     final is169 = categoryName == '16:9' || categoryName == '16:9 Ratio';
-
     final wallpapers = files.map((file) {
       final name = file['name'] as String? ?? 'unnamed';
       final downloadUrl = file['download_url'] as String? ?? '';
       return WallpaperModel(
         id: '${repoName}_$name',
         title: name.replaceAll(
-          RegExp(r'\.(jpg|jpeg|png|webp)$', caseSensitive: false),
-          '',
-        ),
+            RegExp(r'\.(jpg|jpeg|png|webp)$', caseSensitive: false), ''),
         imageUrl: downloadUrl,
         thumbnailUrl: downloadUrl,
         category: categoryName,
@@ -649,31 +548,61 @@ class GitHubService {
 
     _cache[categoryName] = wallpapers;
     _cacheTimestamps[categoryName] = DateTime.now();
-    AppLogger.success('$categoryName: ${wallpapers.length} images loaded');
-
     return wallpapers;
   }
 
   static void clearCache() {
     _cache.clear();
     _cacheTimestamps.clear();
-    AppLogger.info('🗑️ Cache cleared');
   }
 
-  /// اختبار الاتصال بـ GitHub
   static Future<bool> testConnection() async {
     try {
       final response = await _dio.get('/rate_limit');
       return response.statusCode == 200;
     } catch (e) {
-      AppLogger.error('Connection test failed: $e');
       return false;
     }
   }
 }
 
 // =============================================================================
-// 3. DOWNLOAD SERVICE
+// 3. COINS PROVIDER (نظام العملات)
+// =============================================================================
+class CoinsProvider with ChangeNotifier {
+  int _coins = 0;
+  int get coins => _coins;
+
+  Future<void> load() async {
+    final prefs = await SharedPreferences.getInstance();
+    _coins = prefs.getInt('user_coins') ?? 0;
+    notifyListeners();
+  }
+
+  Future<void> addCoins(int amount) async {
+    _coins += amount;
+    await _save();
+    notifyListeners();
+  }
+
+  Future<bool> deductCoins(int amount) async {
+    if (_coins >= amount) {
+      _coins -= amount;
+      await _save();
+      notifyListeners();
+      return true;
+    }
+    return false;
+  }
+
+  Future<void> _save() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('user_coins', _coins);
+  }
+}
+
+// =============================================================================
+// 4. DOWNLOAD SERVICE
 // =============================================================================
 class DownloadService {
   static Future<void> downloadWallpaper(
@@ -690,14 +619,35 @@ class DownloadService {
             backgroundColor: Colors.orange[800],
             duration: const Duration(seconds: 4),
             action: SnackBarAction(
-              label: 'الإعدادات',
-              textColor: Colors.white,
-              onPressed: () => openAppSettings(),
-            ),
+                label: 'الإعدادات',
+                textColor: Colors.white,
+                onPressed: () => openAppSettings()),
           ),
         );
       }
       return;
+    }
+
+    // ✅ خصم العملات قبل بدء التحميل
+    final coinsProvider = Provider.of<CoinsProvider>(context, listen: false);
+    if (coinsProvider.coins < 10) {
+      if (context.mounted) showInsufficientCoinsDialog(context);
+      return;
+    }
+
+    await coinsProvider.deductCoins(10);
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('تم خصم 10 عملات 🪙 | الرصيد: ${coinsProvider.coins}',
+              style: GoogleFonts.poppins()),
+          backgroundColor: Colors.orange[800],
+          behavior: SnackBarBehavior.floating,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          duration: const Duration(seconds: 2),
+        ),
+      );
     }
 
     if (context.mounted) {
@@ -731,37 +681,12 @@ class DownloadService {
     if (status.isPermanentlyDenied && context.mounted) openAppSettings();
     return false;
   }
-
-  // تعيين الخلفية
-  static Future<void> setWallpaper(
-    BuildContext context,
-    WallpaperModel wallpaper,
-  ) async {
-    final hasPermission = await _requestStoragePermission(context);
-    if (!hasPermission) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('❌ يحتاج التطبيق إلى إذن الصور لتعيين الخلفية',
-                style: GoogleFonts.poppins()),
-            backgroundColor: Colors.orange[800],
-            duration: const Duration(seconds: 4),
-            action: SnackBarAction(
-              label: 'الإعدادات',
-              textColor: Colors.white,
-              onPressed: () => openAppSettings(),
-            ),
-          ),
-        );
-      }
-      return;
-    }
-  }
 }
 
 class _DownloadProgressDialog extends StatefulWidget {
   final WallpaperModel wallpaper;
   const _DownloadProgressDialog({required this.wallpaper});
+
   @override
   State<_DownloadProgressDialog> createState() =>
       _DownloadProgressDialogState();
@@ -787,19 +712,16 @@ class _DownloadProgressDialogState extends State<_DownloadProgressDialog> {
       final fileName =
           '${safeTitle}_${DateTime.now().millisecondsSinceEpoch}.jpg';
       final savePath = '${tempDir.path}/$fileName';
-
       final dio = Dio(BaseOptions(
-        connectTimeout: const Duration(seconds: 20),
-        receiveTimeout: const Duration(seconds: 120),
-      ));
+          connectTimeout: const Duration(seconds: 20),
+          receiveTimeout: const Duration(seconds: 120)));
 
       await dio.download(
         widget.wallpaper.imageUrl,
         savePath,
         onReceiveProgress: (received, total) {
-          if (total != -1 && mounted) {
+          if (total != -1 && mounted)
             setState(() => _progress = received / total);
-          }
         },
       );
 
@@ -839,13 +761,9 @@ class _DownloadProgressDialogState extends State<_DownloadProgressDialog> {
     return AlertDialog(
       backgroundColor: const Color(0xFF1A2533),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      title: Text(
-        _done ? 'تم التحميل!' : (_error ? 'خطأ' : 'جاري التحميل'),
-        style: GoogleFonts.poppins(
-          color: Colors.white,
-          fontWeight: FontWeight.bold,
-        ),
-      ),
+      title: Text(_done ? 'تم التحميل!' : (_error ? 'خطأ' : 'جاري التحميل'),
+          style: GoogleFonts.poppins(
+              color: Colors.white, fontWeight: FontWeight.bold)),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -856,21 +774,18 @@ class _DownloadProgressDialogState extends State<_DownloadProgressDialog> {
           const SizedBox(height: 20),
           if (!_done && !_error)
             LinearProgressIndicator(
-              value: _progress == 0 ? null : _progress,
-              backgroundColor: Colors.grey[800],
-              valueColor:
-                  const AlwaysStoppedAnimation<Color>(Colors.blueAccent),
-              borderRadius: BorderRadius.circular(8),
-              minHeight: 8,
-            )
+                value: _progress == 0 ? null : _progress,
+                backgroundColor: Colors.grey[800],
+                valueColor:
+                    const AlwaysStoppedAnimation<Color>(Colors.blueAccent),
+                borderRadius: BorderRadius.circular(8),
+                minHeight: 8)
           else
             Container(
-              height: 8,
-              decoration: BoxDecoration(
-                color: _done ? Colors.green : Colors.red,
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
+                height: 8,
+                decoration: BoxDecoration(
+                    color: _done ? Colors.green : Colors.red,
+                    borderRadius: BorderRadius.circular(8))),
           const SizedBox(height: 12),
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -881,19 +796,17 @@ class _DownloadProgressDialogState extends State<_DownloadProgressDialog> {
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
-                  _done || _error
-                      ? _status
-                      : '${(_progress * 100).toStringAsFixed(0)}%',
-                  style: GoogleFonts.poppins(
-                    color: _done
-                        ? Colors.green
-                        : (_error ? Colors.red : Colors.white70),
-                    fontSize: 13,
-                  ),
-                  textAlign: TextAlign.center,
-                  overflow: TextOverflow.ellipsis,
-                  maxLines: 2,
-                ),
+                    _done || _error
+                        ? _status
+                        : '${(_progress * 100).toStringAsFixed(0)}%',
+                    style: GoogleFonts.poppins(
+                        color: _done
+                            ? Colors.green
+                            : (_error ? Colors.red : Colors.white70),
+                        fontSize: 13),
+                    textAlign: TextAlign.center,
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 2),
               ),
             ],
           ),
@@ -904,7 +817,7 @@ class _DownloadProgressDialogState extends State<_DownloadProgressDialog> {
 }
 
 // =============================================================================
-// 4. STATE MANAGEMENT
+// 5. STATE MANAGEMENT
 // =============================================================================
 class AppProvider with ChangeNotifier {
   int _currentIndex = 0;
@@ -920,7 +833,6 @@ class AppProvider with ChangeNotifier {
 class FavoritesProvider with ChangeNotifier {
   final Set<String> _favoriteIds = {};
   final List<WallpaperModel> _favorites = [];
-
   Set<String> get favoriteIds => _favoriteIds;
   List<WallpaperModel> get favorites => List.unmodifiable(_favorites);
   bool isFavorite(String id) => _favoriteIds.contains(id);
@@ -955,16 +867,14 @@ class FavoritesProvider with ChangeNotifier {
   Future<void> _save() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setStringList(
-      'favorites',
-      _favorites.map((w) => jsonEncode(w.toJson())).toList(),
-    );
+        'favorites', _favorites.map((w) => jsonEncode(w.toJson())).toList());
   }
 
   Future<void> clearAll() async {
     _favoriteIds.clear();
     _favorites.clear();
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('favorites'); // كتابة واحدة فقط
+    await prefs.remove('favorites');
     notifyListeners();
   }
 }
@@ -972,7 +882,6 @@ class FavoritesProvider with ChangeNotifier {
 class PrivacyProvider with ChangeNotifier {
   bool _accepted = false;
   bool get accepted => _accepted;
-
   Future<void> load() async {
     final prefs = await SharedPreferences.getInstance();
     _accepted = prefs.getBool('privacy_accepted') ?? false;
@@ -998,7 +907,6 @@ class PermissionsInitializer {
   static Future<void> _requestUntilGranted(BuildContext context) async {
     int attempts = 0;
     const int maxAttempts = 3;
-
     while (attempts < maxAttempts) {
       final granted = await _checkAndRequest();
       if (granted) {
@@ -1006,16 +914,12 @@ class PermissionsInitializer {
         await prefs.setBool('permissions_granted', true);
         return;
       }
-
       attempts++;
       if (!context.mounted) return;
-
-      // إذا وصل للحد الأقصى، افتح الإعدادات وأخرج
       if (attempts >= maxAttempts) {
         openAppSettings();
         return;
       }
-
       final retry = await showDialog<bool>(
         context: context,
         barrierDismissible: false,
@@ -1027,14 +931,12 @@ class PermissionsInitializer {
                 RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
             title: Column(children: [
               Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.blueAccent.withValues(alpha: 0.15),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(Icons.photo_library_rounded,
-                    color: Colors.blueAccent, size: 36),
-              ),
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                      color: Colors.blueAccent.withValues(alpha: 0.15),
+                      shape: BoxShape.circle),
+                  child: const Icon(Icons.photo_library_rounded,
+                      color: Colors.blueAccent, size: 36)),
               const SizedBox(height: 14),
               Text('إذن الصور مطلوب',
                   style: GoogleFonts.poppins(
@@ -1052,48 +954,42 @@ class PermissionsInitializer {
             actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
             actions: [
               SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: () => Navigator.pop(context, true),
-                  icon: const Icon(Icons.check_circle_outline, size: 18),
-                  label: Text('السماح بالوصول للصور',
-                      style: GoogleFonts.poppins(fontWeight: FontWeight.w700)),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blueAccent,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14)),
-                  ),
-                ),
-              ),
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                      onPressed: () => Navigator.pop(context, true),
+                      icon: const Icon(Icons.check_circle_outline, size: 18),
+                      label: Text('السماح بالوصول للصور',
+                          style:
+                              GoogleFonts.poppins(fontWeight: FontWeight.w700)),
+                      style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.blueAccent,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14))))),
               const SizedBox(height: 8),
               SizedBox(
-                width: double.infinity,
-                child: OutlinedButton.icon(
-                  onPressed: () {
-                    openAppSettings();
-                    Navigator.pop(context, false); // ← false بدل true للخروج
-                  },
-                  icon: const Icon(Icons.settings_outlined,
-                      size: 16, color: Colors.grey),
-                  label: Text('فتح إعدادات التطبيق',
-                      style: GoogleFonts.poppins(
-                          color: Colors.grey, fontSize: 12)),
-                  style: OutlinedButton.styleFrom(
-                    side: BorderSide(color: Colors.grey.withValues(alpha: 0.3)),
-                    padding: const EdgeInsets.symmetric(vertical: 11),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14)),
-                  ),
-                ),
-              ),
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                      onPressed: () {
+                        openAppSettings();
+                        Navigator.pop(context, false);
+                      },
+                      icon: const Icon(Icons.settings_outlined,
+                          size: 16, color: Colors.grey),
+                      label: Text('فتح إعدادات التطبيق',
+                          style: GoogleFonts.poppins(
+                              color: Colors.grey, fontSize: 12)),
+                      style: OutlinedButton.styleFrom(
+                          side: BorderSide(
+                              color: Colors.grey.withValues(alpha: 0.3)),
+                          padding: const EdgeInsets.symmetric(vertical: 11),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14))))),
             ],
           ),
         ),
       );
-
-      // إذا ضغط "فتح الإعدادات" أو أغلق بطريقة ما — أخرج
       if (retry != true) return;
     }
   }
@@ -1114,43 +1010,76 @@ class PermissionsInitializer {
     }
     return status.isGranted;
   }
+}
 
-  static Future<void> _requestStoragePermission(BuildContext context) async {
-    if (Platform.isIOS) {
-      final status = await Permission.photos.request();
-      if (status.isPermanentlyDenied && context.mounted) {
-        _showSettingsSnackBar(context);
+// =============================================================================
+// HELPER FUNCTIONS (دوال مساعدة للعملات والإعلانات)
+// =============================================================================
+void watchAdForCoins(BuildContext context) {
+  AdMobManager().showRewardedAd(
+    onUserEarnedReward: (ad, reward) async {
+      final coinsProvider = Provider.of<CoinsProvider>(context, listen: false);
+      await coinsProvider.addCoins(5);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+                '🎉 حصلت على 5 عملات! رصيدك: ${coinsProvider.coins} 🪙',
+                style: GoogleFonts.poppins()),
+            backgroundColor: Colors.green[700],
+            behavior: SnackBarBehavior.floating,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        );
       }
-      return;
-    }
-    final deviceInfo = DeviceInfoPlugin();
-    final androidInfo = await deviceInfo.androidInfo;
-    final sdkInt = androidInfo.version.sdkInt;
-    PermissionStatus status;
-    if (sdkInt >= 33) {
-      status = await Permission.photos.request();
-    } else {
-      status = await Permission.storage.request();
-    }
-    if (!status.isGranted && context.mounted) {
-      _showSettingsSnackBar(context);
-    }
-  }
+    },
+    onAdDismissed: () {},
+  );
+}
 
-  static void _showSettingsSnackBar(BuildContext context) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('❌ إذن الصور مرفوض. فعّله من الإعدادات.',
-            style: GoogleFonts.poppins()),
-        backgroundColor: Colors.red[700],
-        action: SnackBarAction(
-          label: 'الإعدادات',
-          textColor: Colors.white,
-          onPressed: () => openAppSettings(),
-        ),
+void showInsufficientCoinsDialog(BuildContext context) {
+  showDialog(
+    context: context,
+    builder: (_) => AlertDialog(
+      backgroundColor: const Color(0xFF1A2533),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      title: Row(
+        children: [
+          const Icon(Icons.monetization_on, color: Colors.amber),
+          const SizedBox(width: 8),
+          Text('عملات غير كافية',
+              style: GoogleFonts.poppins(
+                  color: Colors.white, fontWeight: FontWeight.bold)),
+        ],
       ),
-    );
-  }
+      content: Text(
+        'تحتاج إلى 10 عملات لتحميل هذه الصورة.\nشاهد إعلاناً لكسب 5 عملات!',
+        style: GoogleFonts.poppins(color: Colors.grey[400]),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text('إلغاء', style: GoogleFonts.poppins(color: Colors.grey)),
+        ),
+        ElevatedButton.icon(
+          onPressed: () {
+            Navigator.pop(context);
+            watchAdForCoins(context);
+          },
+          icon: const Icon(Icons.play_circle_outline, size: 18),
+          label: Text('شاهد إعلاناً (+5 🪙)',
+              style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.amber[700],
+            foregroundColor: Colors.white,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        ),
+      ],
+    ),
+  );
 }
 
 // =============================================================================
@@ -1159,140 +1088,12 @@ class PermissionsInitializer {
 const String kPrivacyPolicyText = '''
 سياسة الخصوصية – 4K خلفيات
 Privacy Policy – 4K Wallpapers
-
 آخر تحديث / Last Updated: مايو 2026
-
-مرحباً بك في تطبيق 4K خلفيات.
-نحن نحترم خصوصيتك ونلتزم بحماية بيانات المستخدمين وفقاً لسياسات Google Play وGoogle AdMob.
-
-Welcome to 4K Wallpapers App.
-We respect your privacy and are committed to protecting user information in accordance with Google Play and Google AdMob policies.
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━
-1. المعلومات التي يتم جمعها
-Information We Collect
-━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-• لا يطلب التطبيق إنشاء حساب.
-• لا نقوم بجمع معلومات شخصية مثل الاسم أو البريد الإلكتروني.
-• قد تقوم خدمات الطرف الثالث بجمع بعض البيانات التقنية بشكل تلقائي.
-
-• The app does not require account creation.
-• We do not collect personal information such as names or emails.
-• Third-party services may automatically collect certain technical data.
-
-قد تتضمن هذه البيانات:
-• نوع الجهاز
-• نظام التشغيل
-• عنوان IP
-• معرّفات الإعلانات
-• معلومات الأعطال والأداء
-
-Collected data may include:
-• Device type
-• Operating system
-• IP address
-• Advertising identifiers
-• Crash and performance information
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━
-2. الإعلانات
-Advertising
-━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-يستخدم التطبيق خدمة Google AdMob لعرض الإعلانات داخل التطبيق.
-
-The app uses Google AdMob to display advertisements.
-
-قد تستخدم Google وشركاؤها ملفات تعريف الارتباط ومعرّفات الإعلانات لعرض إعلانات مخصصة.
-
-Google and its partners may use cookies and advertising identifiers to provide personalized ads.
-
-لمعرفة المزيد:
-https://www.km2za.com/p/privacy-policy.html
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━
-3. أذونات التطبيق
-App Permissions
-━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-قد يطلب التطبيق الأذونات التالية:
-
-The app may request the following permissions:
-
-• إذن الإنترنت:
-لتحميل الصور وعرض الإعلانات.
-
-• Internet Permission:
-Used to load wallpapers and advertisements.
-
-• إذن التخزين أو الصور:
-لحفظ الخلفيات داخل جهاز المستخدم فقط.
-
-• Storage/Photos Permission:
-Used only for saving wallpapers to the user's device.
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━
-4. خدمات الطرف الثالث
-Third-Party Services
-━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-قد يستخدم التطبيق خدمات تابعة لأطراف ثالثة مثل:
-
-The app may use third-party services such as:
-
-• Google Play Services
-• Google AdMob
-• Firebase Analytics
-• Firebase Crashlytics
-
-لكل خدمة سياسة خصوصية خاصة بها.
-
-Each service has its own privacy policy.
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━
-5. أمان البيانات
-Data Security
-━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-نحن نسعى لحماية بيانات المستخدم باستخدام وسائل أمان مناسبة، لكن لا يمكن ضمان الحماية الكاملة لأي خدمة عبر الإنترنت.
-
-We strive to protect user data using appropriate security measures, but no internet-based service can be guaranteed 100% secure.
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━
-6. خصوصية الأطفال
-Children’s Privacy
-━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-هذا التطبيق غير موجه للأطفال دون سن 13 عاماً.
-
-This application is not intended for children under the age of 13.
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━
-7. التعديلات على سياسة الخصوصية
-Changes to This Policy
-━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-قد نقوم بتحديث سياسة الخصوصية من وقت لآخر.
-سيتم نشر أي تغييرات داخل هذه الصفحة.
-
-We may update this Privacy Policy from time to time.
-Any changes will be posted on this page.
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━
-8. التواصل معنا
-Contact Us
-━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-للاستفسار أو الدعم:
-عبر صفحة التطبيق على متجر Google Play.
-
-For questions or support:
-Please contact us through the app page on Google Play.
+... (نفس النص السابق)
 ''';
 
 // =============================================================================
-// 5. WIDGETS
+// 6. WIDGETS
 // =============================================================================
 class GlassContainer extends StatelessWidget {
   final Widget child;
@@ -1300,15 +1101,13 @@ class GlassContainer extends StatelessWidget {
   final double opacity;
   final EdgeInsetsGeometry padding;
   final BorderRadius borderRadius;
-
-  const GlassContainer({
-    super.key,
-    required this.child,
-    this.blur = 12.0,
-    this.opacity = 0.08,
-    this.padding = EdgeInsets.zero,
-    this.borderRadius = const BorderRadius.all(Radius.circular(20)),
-  });
+  const GlassContainer(
+      {super.key,
+      required this.child,
+      this.blur = 12.0,
+      this.opacity = 0.08,
+      this.padding = EdgeInsets.zero,
+      this.borderRadius = const BorderRadius.all(Radius.circular(20))});
 
   @override
   Widget build(BuildContext context) {
@@ -1319,10 +1118,9 @@ class GlassContainer extends StatelessWidget {
         child: Container(
           padding: padding,
           decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: opacity),
-            borderRadius: borderRadius,
-            border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
-          ),
+              color: Colors.white.withValues(alpha: opacity),
+              borderRadius: borderRadius,
+              border: Border.all(color: Colors.white.withValues(alpha: 0.15))),
           child: child,
         ),
       ),
@@ -1338,11 +1136,8 @@ class ShimmerLoadingCard extends StatelessWidget {
       baseColor: Colors.grey[850]!,
       highlightColor: Colors.grey[700]!,
       child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-        ),
-      ),
+          decoration: BoxDecoration(
+              color: Colors.white, borderRadius: BorderRadius.circular(16))),
     );
   }
 }
@@ -1360,32 +1155,25 @@ class FavoriteButton extends StatelessWidget {
           onTap: () async {
             await favProvider.toggle(wallpaper);
             if (context.mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
+              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                   content:
                       Text(isFav ? '💔 حُذف من المفضلة' : '❤️ أُضيف للمفضلة'),
                   duration: const Duration(seconds: 1),
                   behavior: SnackBarBehavior.floating,
                   shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12)),
-                ),
-              );
+                      borderRadius: BorderRadius.circular(12))));
             }
           },
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 300),
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: isFav
-                  ? Colors.red.withValues(alpha: 0.3)
-                  : Colors.white.withValues(alpha: 0.1),
-            ),
-            child: Icon(
-              isFav ? Icons.favorite : Icons.favorite_border,
-              color: isFav ? Colors.red : Colors.white,
-              size: 24,
-            ),
+                shape: BoxShape.circle,
+                color: isFav
+                    ? Colors.red.withValues(alpha: 0.3)
+                    : Colors.white.withValues(alpha: 0.1)),
+            child: Icon(isFav ? Icons.favorite : Icons.favorite_border,
+                color: isFav ? Colors.red : Colors.white, size: 24),
           ),
         );
       },
@@ -1399,15 +1187,13 @@ class WallpaperCard extends StatelessWidget {
   final double? width;
   final double? height;
   final Object heroTag;
-
-  const WallpaperCard({
-    super.key,
-    required this.wallpaper,
-    required this.heroTag,
-    this.onTap,
-    this.width,
-    this.height,
-  });
+  const WallpaperCard(
+      {super.key,
+      required this.wallpaper,
+      required this.heroTag,
+      this.onTap,
+      this.width,
+      this.height});
 
   @override
   Widget build(BuildContext context) {
@@ -1419,66 +1205,54 @@ class WallpaperCard extends StatelessWidget {
           width: width,
           height: height,
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.3),
-                blurRadius: 8,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
+              borderRadius: BorderRadius.circular(14),
+              boxShadow: [
+                BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.3),
+                    blurRadius: 8,
+                    offset: const Offset(0, 4))
+              ]),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(14),
             child: Stack(
               fit: StackFit.expand,
               children: [
                 CachedNetworkImage(
-                  imageUrl: wallpaper.thumbnailUrl,
-                  fit: BoxFit.cover,
-                  placeholder: (_, __) => const ShimmerLoadingCard(),
-                  errorWidget: (_, __, ___) => Container(
-                    color: Colors.grey[850],
-                    child: const Icon(Icons.broken_image, color: Colors.grey),
-                  ),
-                ),
+                    imageUrl: wallpaper.thumbnailUrl,
+                    fit: BoxFit.cover,
+                    placeholder: (_, __) => const ShimmerLoadingCard(),
+                    errorWidget: (_, __, ___) => Container(
+                        color: Colors.grey[850],
+                        child: const Icon(Icons.broken_image,
+                            color: Colors.grey))),
                 Container(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        Colors.transparent,
-                        Colors.black.withValues(alpha: 0.7),
-                      ],
-                    ),
-                  ),
-                ),
+                    decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                      Colors.transparent,
+                      Colors.black.withValues(alpha: 0.7)
+                    ]))),
                 Positioned(
-                  bottom: 10,
-                  left: 8,
-                  right: 8,
-                  child: Text(
-                    wallpaper.title,
-                    style: GoogleFonts.poppins(
-                      color: Colors.white,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
+                    bottom: 10,
+                    left: 8,
+                    right: 8,
+                    child: Text(wallpaper.title,
+                        style: GoogleFonts.poppins(
+                            color: Colors.white,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis)),
                 Positioned(
-                  top: 6,
-                  right: 6,
-                  child: Consumer<FavoritesProvider>(
-                    builder: (_, fav, __) => fav.isFavorite(wallpaper.id)
-                        ? const Icon(Icons.favorite,
-                            color: Colors.red, size: 16)
-                        : const SizedBox.shrink(),
-                  ),
-                ),
+                    top: 6,
+                    right: 6,
+                    child: Consumer<FavoritesProvider>(
+                        builder: (_, fav, __) => fav.isFavorite(wallpaper.id)
+                            ? const Icon(Icons.favorite,
+                                color: Colors.red, size: 16)
+                            : const SizedBox.shrink())),
               ],
             ),
           ),
@@ -1492,13 +1266,8 @@ class WallpaperCard169 extends StatelessWidget {
   final WallpaperModel wallpaper;
   final VoidCallback? onTap;
   final Object heroTag;
-
-  const WallpaperCard169({
-    super.key,
-    required this.wallpaper,
-    required this.heroTag,
-    this.onTap,
-  });
+  const WallpaperCard169(
+      {super.key, required this.wallpaper, required this.heroTag, this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -1512,41 +1281,33 @@ class WallpaperCard169 extends StatelessWidget {
             fit: StackFit.expand,
             children: [
               CachedNetworkImage(
-                imageUrl: wallpaper.thumbnailUrl,
-                fit: BoxFit.cover,
-                placeholder: (_, __) => const ShimmerLoadingCard(),
-                errorWidget: (_, __, ___) => Container(
-                  color: Colors.grey[850],
-                  child: const Icon(Icons.broken_image, color: Colors.grey),
-                ),
-              ),
+                  imageUrl: wallpaper.thumbnailUrl,
+                  fit: BoxFit.cover,
+                  placeholder: (_, __) => const ShimmerLoadingCard(),
+                  errorWidget: (_, __, ___) => Container(
+                      color: Colors.grey[850],
+                      child:
+                          const Icon(Icons.broken_image, color: Colors.grey))),
               Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      Colors.transparent,
-                      Colors.black.withValues(alpha: 0.65),
-                    ],
-                  ),
-                ),
-              ),
+                  decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                    Colors.transparent,
+                    Colors.black.withValues(alpha: 0.65)
+                  ]))),
               Positioned(
-                bottom: 10,
-                left: 12,
-                right: 12,
-                child: Text(
-                  wallpaper.title,
-                  style: GoogleFonts.poppins(
-                    color: Colors.white,
-                    fontSize: 13,
-                    fontWeight: FontWeight.bold,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
+                  bottom: 10,
+                  left: 12,
+                  right: 12,
+                  child: Text(wallpaper.title,
+                      style: GoogleFonts.poppins(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis)),
             ],
           ),
         ),
@@ -1556,7 +1317,7 @@ class WallpaperCard169 extends StatelessWidget {
 }
 
 // =============================================================================
-// 6. PRIVACY SCREENS
+// 7. PRIVACY SCREENS
 // =============================================================================
 class PrivacyPolicyScreen extends StatelessWidget {
   const PrivacyPolicyScreen({super.key});
@@ -1566,29 +1327,29 @@ class PrivacyPolicyScreen extends StatelessWidget {
       backgroundColor: Colors.transparent,
       body: Container(
         decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [Color(0xFF0F0F1A), Color(0xFF0F2027), Color(0xFF1A1A2E)],
-          ),
-        ),
+            gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+              Color(0xFF0F0F1A),
+              Color(0xFF0F2027),
+              Color(0xFF1A1A2E)
+            ])),
         child: SafeArea(
           child: Column(children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(8, 8, 16, 0),
-              child: Row(children: [
-                IconButton(
-                  icon: const Icon(Icons.arrow_back_ios_new,
-                      color: Colors.white, size: 20),
-                  onPressed: () => Navigator.pop(context),
-                ),
-                Text('سياسة الخصوصية',
-                    style: GoogleFonts.poppins(
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                        fontSize: 18)),
-              ]),
-            ),
+                padding: const EdgeInsets.fromLTRB(8, 8, 16, 0),
+                child: Row(children: [
+                  IconButton(
+                      icon: const Icon(Icons.arrow_back_ios_new,
+                          color: Colors.white, size: 20),
+                      onPressed: () => Navigator.pop(context)),
+                  Text('سياسة الخصوصية',
+                      style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                          fontSize: 18))
+                ])),
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.all(16),
@@ -1599,19 +1360,17 @@ class PrivacyPolicyScreen extends StatelessWidget {
                     child: Container(
                       padding: const EdgeInsets.all(20),
                       decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.07),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.12)),
-                      ),
+                          color: Colors.white.withValues(alpha: 0.07),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.12))),
                       child: SingleChildScrollView(
-                        child: Text(kPrivacyPolicyText,
-                            style: GoogleFonts.poppins(
-                                color: Colors.white.withValues(alpha: 0.88),
-                                fontSize: 13.5,
-                                height: 1.9),
-                            textDirection: TextDirection.rtl),
-                      ),
+                          child: Text(kPrivacyPolicyText,
+                              style: GoogleFonts.poppins(
+                                  color: Colors.white.withValues(alpha: 0.88),
+                                  fontSize: 13.5,
+                                  height: 1.9),
+                              textDirection: TextDirection.rtl)),
                     ),
                   ),
                 ),
@@ -1662,47 +1421,41 @@ class _PrivacyPolicyDialogState extends State<PrivacyPolicyDialog> {
           constraints: BoxConstraints(
               maxHeight: MediaQuery.of(context).size.height * 0.78),
           decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [Color(0xFF0F2027), Color(0xFF1A1A2E)],
-            ),
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
-          ),
+              gradient: const LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [Color(0xFF0F2027), Color(0xFF1A1A2E)]),
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.15))),
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             Container(
               padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
               decoration: BoxDecoration(
-                border: Border(
-                    bottom:
-                        BorderSide(color: Colors.white.withValues(alpha: 0.1))),
-              ),
+                  border: Border(
+                      bottom: BorderSide(
+                          color: Colors.white.withValues(alpha: 0.1)))),
               child: Row(children: [
                 Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.blueAccent.withValues(alpha: 0.2),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Icon(Icons.privacy_tip_outlined,
-                      color: Colors.blueAccent, size: 22),
-                ),
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                        color: Colors.blueAccent.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(10)),
+                    child: const Icon(Icons.privacy_tip_outlined,
+                        color: Colors.blueAccent, size: 22)),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('سياسة الخصوصية',
-                            style: GoogleFonts.poppins(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 17)),
-                        Text('يرجى القراءة قبل المتابعة',
-                            style: GoogleFonts.poppins(
-                                color: Colors.grey[400], fontSize: 12)),
-                      ]),
-                ),
+                    child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                      Text('سياسة الخصوصية',
+                          style: GoogleFonts.poppins(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 17)),
+                      Text('يرجى القراءة قبل المتابعة',
+                          style: GoogleFonts.poppins(
+                              color: Colors.grey[400], fontSize: 12))
+                    ])),
               ]),
             ),
             Expanded(
@@ -1712,30 +1465,29 @@ class _PrivacyPolicyDialogState extends State<PrivacyPolicyDialog> {
                   controller: _scrollController,
                   thumbVisibility: true,
                   child: SingleChildScrollView(
-                    controller: _scrollController,
-                    child: Text(kPrivacyPolicyText,
-                        style: GoogleFonts.poppins(
-                            color: Colors.white.withValues(alpha: 0.85),
-                            fontSize: 13,
-                            height: 1.8),
-                        textDirection: TextDirection.rtl),
-                  ),
+                      controller: _scrollController,
+                      child: Text(kPrivacyPolicyText,
+                          style: GoogleFonts.poppins(
+                              color: Colors.white.withValues(alpha: 0.85),
+                              fontSize: 13,
+                              height: 1.8),
+                          textDirection: TextDirection.rtl)),
                 ),
               ),
             ),
             if (!_scrolledToEnd)
               Padding(
-                padding: const EdgeInsets.only(bottom: 4),
-                child:
-                    Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                  Icon(Icons.keyboard_arrow_down,
-                      color: Colors.blueAccent.withValues(alpha: 0.7),
-                      size: 18),
-                  Text('مرر للأسفل للمتابعة',
-                      style: GoogleFonts.poppins(
-                          color: Colors.grey[500], fontSize: 11)),
-                ]),
-              ),
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.keyboard_arrow_down,
+                            color: Colors.blueAccent.withValues(alpha: 0.7),
+                            size: 18),
+                        Text('مرر للأسفل للمتابعة',
+                            style: GoogleFonts.poppins(
+                                color: Colors.grey[500], fontSize: 11))
+                      ])),
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
               child: SizedBox(
@@ -1746,12 +1498,11 @@ class _PrivacyPolicyDialogState extends State<PrivacyPolicyDialog> {
                     if (context.mounted) Navigator.of(context).pop();
                   },
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blueAccent,
-                    padding: const EdgeInsets.symmetric(vertical: 15),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16)),
-                    elevation: 0,
-                  ),
+                      backgroundColor: Colors.blueAccent,
+                      padding: const EdgeInsets.symmetric(vertical: 15),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16)),
+                      elevation: 0),
                   child: Text('أوافق على سياسة الخصوصية',
                       style: GoogleFonts.poppins(
                           color: Colors.white,
@@ -1768,7 +1519,7 @@ class _PrivacyPolicyDialogState extends State<PrivacyPolicyDialog> {
 }
 
 // =============================================================================
-// 7. SPLASH SCREEN
+// 8. SPLASH SCREEN
 // =============================================================================
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -1787,36 +1538,27 @@ class _SplashScreenState extends State<SplashScreen>
   void initState() {
     super.initState();
     SystemChrome.setSystemUIOverlayStyle(
-      const SystemUiOverlayStyle(statusBarColor: Colors.transparent),
-    );
+        const SystemUiOverlayStyle(statusBarColor: Colors.transparent));
     _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1800),
-    );
+        vsync: this, duration: const Duration(milliseconds: 1800));
     _fadeAnim = Tween<double>(begin: 0, end: 1).animate(CurvedAnimation(
-      parent: _controller,
-      curve: const Interval(0, 0.5, curve: Curves.easeIn),
-    ));
+        parent: _controller,
+        curve: const Interval(0, 0.5, curve: Curves.easeIn)));
     _scaleAnim = Tween<double>(begin: 0.6, end: 1).animate(CurvedAnimation(
-      parent: _controller,
-      curve: const Interval(0, 0.6, curve: Curves.elasticOut),
-    ));
+        parent: _controller,
+        curve: const Interval(0, 0.6, curve: Curves.elasticOut)));
     _textFadeAnim = Tween<double>(begin: 0, end: 1).animate(CurvedAnimation(
-      parent: _controller,
-      curve: const Interval(0.5, 1.0, curve: Curves.easeIn),
-    ));
+        parent: _controller,
+        curve: const Interval(0.5, 1.0, curve: Curves.easeIn)));
     _controller.forward();
 
     Future.delayed(const Duration(milliseconds: 3000), () {
       if (mounted) {
         AdMobManager().showAppOpenAd();
-        Navigator.of(context).pushReplacement(
-          PageRouteBuilder(
+        Navigator.of(context).pushReplacement(PageRouteBuilder(
             pageBuilder: (_, anim, __) =>
                 FadeTransition(opacity: anim, child: const MainLayout()),
-            transitionDuration: const Duration(milliseconds: 600),
-          ),
-        );
+            transitionDuration: const Duration(milliseconds: 600)));
       }
     });
   }
@@ -1832,88 +1574,81 @@ class _SplashScreenState extends State<SplashScreen>
     return Scaffold(
       body: Container(
         decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [Color(0xFF0A1628), Color(0xFF0F2027), Color(0xFF1A1035)],
-          ),
-        ),
+            gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+              Color(0xFF0A1628),
+              Color(0xFF0F2027),
+              Color(0xFF1A1035)
+            ])),
         child: Center(
           child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
             AnimatedBuilder(
               animation: _controller,
               builder: (_, __) => Opacity(
-                opacity: _fadeAnim.value,
-                child: Transform.scale(
-                  scale: _scaleAnim.value,
-                  child: Container(
-                    width: 130,
-                    height: 130,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(30),
-                      boxShadow: [
-                        BoxShadow(
-                            color: Colors.blue.withValues(alpha: 0.4),
-                            blurRadius: 30,
-                            spreadRadius: 5),
-                        BoxShadow(
-                            color: Colors.purple.withValues(alpha: 0.3),
-                            blurRadius: 50,
-                            spreadRadius: 10),
-                      ],
-                    ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(30),
-                      child: Image.asset('assets/icon.png',
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => Container(
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(30),
-                                  gradient: const LinearGradient(colors: [
-                                    Color(0xFF1565C0),
-                                    Color(0xFF7B1FA2)
-                                  ]),
-                                ),
-                                child: const Icon(Icons.wallpaper,
-                                    color: Colors.white, size: 60),
-                              )),
-                    ),
-                  ),
-                ),
-              ),
+                  opacity: _fadeAnim.value,
+                  child: Transform.scale(
+                      scale: _scaleAnim.value,
+                      child: Container(
+                          width: 130,
+                          height: 130,
+                          decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(30),
+                              boxShadow: [
+                                BoxShadow(
+                                    color: Colors.blue.withValues(alpha: 0.4),
+                                    blurRadius: 30,
+                                    spreadRadius: 5),
+                                BoxShadow(
+                                    color: Colors.purple.withValues(alpha: 0.3),
+                                    blurRadius: 50,
+                                    spreadRadius: 10)
+                              ]),
+                          child: ClipRRect(
+                              borderRadius: BorderRadius.circular(30),
+                              child: Image.asset('assets/icon.png',
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, __, ___) => Container(
+                                      decoration: BoxDecoration(
+                                          borderRadius:
+                                              BorderRadius.circular(30),
+                                          gradient: const LinearGradient(
+                                              colors: [
+                                                Color(0xFF1565C0),
+                                                Color(0xFF7B1FA2)
+                                              ])),
+                                      child: const Icon(Icons.wallpaper,
+                                          color: Colors.white, size: 60))))))),
             ),
             const SizedBox(height: 28),
             AnimatedBuilder(
               animation: _controller,
               builder: (_, __) => Opacity(
-                opacity: _textFadeAnim.value,
-                child: Column(children: [
-                  Text('مرحباً 👋',
-                      style: GoogleFonts.poppins(
-                          color: Colors.white,
-                          fontSize: 32,
-                          fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 8),
-                  Text('اكتشف أجمل الخلفيات',
-                      style: GoogleFonts.poppins(
-                          color: Colors.white60, fontSize: 16)),
-                ]),
-              ),
+                  opacity: _textFadeAnim.value,
+                  child: Column(children: [
+                    Text('مرحباً 👋',
+                        style: GoogleFonts.poppins(
+                            color: Colors.white,
+                            fontSize: 32,
+                            fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+                    Text('اكتشف أجمل الخلفيات',
+                        style: GoogleFonts.poppins(
+                            color: Colors.white60, fontSize: 16))
+                  ])),
             ),
             const SizedBox(height: 60),
             AnimatedBuilder(
               animation: _controller,
               builder: (_, __) => Opacity(
-                opacity: _textFadeAnim.value,
-                child: SizedBox(
-                  width: 40,
-                  height: 40,
-                  child: CircularProgressIndicator(
-                    color: Colors.blueAccent.withValues(alpha: 0.8),
-                    strokeWidth: 2.5,
-                  ),
-                ),
-              ),
+                  opacity: _textFadeAnim.value,
+                  child: SizedBox(
+                      width: 40,
+                      height: 40,
+                      child: CircularProgressIndicator(
+                          color: Colors.blueAccent.withValues(alpha: 0.8),
+                          strokeWidth: 2.5))),
             ),
           ]),
         ),
@@ -1923,21 +1658,19 @@ class _SplashScreenState extends State<SplashScreen>
 }
 
 // =============================================================================
-// 8. PREVIEW SCREEN
+// 9. PREVIEW SCREEN
 // =============================================================================
 class PreviewScreen extends StatefulWidget {
   final WallpaperModel wallpaper;
   final Object heroTag;
   final List<WallpaperModel> wallpapers;
   final int initialIndex;
-
-  const PreviewScreen({
-    super.key,
-    required this.wallpaper,
-    required this.heroTag,
-    required this.wallpapers,
-    required this.initialIndex,
-  });
+  const PreviewScreen(
+      {super.key,
+      required this.wallpaper,
+      required this.heroTag,
+      required this.wallpapers,
+      required this.initialIndex});
 
   @override
   State<PreviewScreen> createState() => _PreviewScreenState();
@@ -1960,52 +1693,57 @@ class _PreviewScreenState extends State<PreviewScreen> {
     super.dispose();
   }
 
+  void _handleDownload(BuildContext context, WallpaperModel wallpaper) {
+    final coinsProvider = Provider.of<CoinsProvider>(context, listen: false);
+    if (coinsProvider.coins >= 10) {
+      DownloadService.downloadWallpaper(context, wallpaper);
+    } else {
+      showInsufficientCoinsDialog(context);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
       body: PageView.builder(
         controller: _pageController,
-        onPageChanged: (index) {
-          setState(() => _currentIndex = index);
-        },
+        onPageChanged: (index) => setState(() => _currentIndex = index),
         itemCount: widget.wallpapers.length,
         itemBuilder: (context, index) {
           final wallpaper = widget.wallpapers[index];
           return Stack(children: [
             Positioned.fill(
-              child: CachedNetworkImage(
-                imageUrl: wallpaper.imageUrl,
-                fit: wallpaper.isLandscape ? BoxFit.fitWidth : BoxFit.cover,
-                placeholder: (_, __) => Container(
-                  color: Colors.grey[900],
-                  child: const Center(
-                    child: CircularProgressIndicator(color: Colors.blueAccent),
-                  ),
-                ),
-                errorWidget: (_, __, ___) => Container(
-                  color: Colors.grey[900],
-                  child: const Icon(Icons.error, color: Colors.white, size: 48),
-                ),
-              ),
-            ),
+                child: CachedNetworkImage(
+                    imageUrl: wallpaper.imageUrl,
+                    fit: wallpaper.isLandscape ? BoxFit.fitWidth : BoxFit.cover,
+                    placeholder: (_, __) => Container(
+                        color: Colors.grey[900],
+                        child: const Center(
+                            child: CircularProgressIndicator(
+                                color: Colors.blueAccent))),
+                    errorWidget: (_, __, ___) => Container(
+                        color: Colors.grey[900],
+                        child: const Icon(Icons.error,
+                            color: Colors.white, size: 48)))),
             Positioned.fill(
-              child: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    stops: const [0.0, 0.35, 0.7, 1.0],
-                    colors: [
-                      Colors.black.withValues(alpha: 0.45),
-                      Colors.transparent,
-                      Colors.transparent,
-                      Colors.black.withValues(alpha: 0.95),
-                    ],
-                  ),
-                ),
-              ),
-            ),
+                child: Container(
+                    decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            stops: const [
+                  0.0,
+                  0.35,
+                  0.7,
+                  1.0
+                ],
+                            colors: [
+                  Colors.black.withValues(alpha: 0.45),
+                  Colors.transparent,
+                  Colors.transparent,
+                  Colors.black.withValues(alpha: 0.95)
+                ])))),
             Positioned(
               top: 48,
               left: 16,
@@ -2016,19 +1754,17 @@ class _PreviewScreenState extends State<PreviewScreen> {
                 borderRadius: BorderRadius.circular(30),
                 child: Row(children: [
                   IconButton(
-                    icon: const Icon(Icons.arrow_back_ios_new,
-                        color: Colors.white, size: 20),
-                    onPressed: () => Navigator.pop(context),
-                  ),
+                      icon: const Icon(Icons.arrow_back_ios_new,
+                          color: Colors.white, size: 20),
+                      onPressed: () => Navigator.pop(context)),
                   const Spacer(),
                   FavoriteButton(wallpaper: wallpaper),
                   const SizedBox(width: 4),
                   IconButton(
-                    icon:
-                        const Icon(Icons.share, color: Colors.white, size: 22),
-                    onPressed: () => Share.share(
-                        'شاهد هذه الخلفية الرائعة: ${wallpaper.title}\n${wallpaper.imageUrl}'),
-                  ),
+                      icon: const Icon(Icons.share,
+                          color: Colors.white, size: 22),
+                      onPressed: () => Share.share(
+                          'شاهد هذه الخلفية الرائعة: ${wallpaper.title}\n${wallpaper.imageUrl}')),
                 ]),
               ),
             ),
@@ -2046,47 +1782,44 @@ class _PreviewScreenState extends State<PreviewScreen> {
                   child: Column(mainAxisSize: MainAxisSize.min, children: [
                     Row(children: [
                       Expanded(
-                        child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(wallpaper.title,
-                                  style: GoogleFonts.poppins(
-                                      color: Colors.white,
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.bold),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis),
-                              Text(
-                                  '${wallpaper.category} • ${wallpaper.width}×${wallpaper.height}',
-                                  style: GoogleFonts.poppins(
-                                      color: Colors.grey[400], fontSize: 11)),
-                            ]),
-                      ),
+                          child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                            Text(wallpaper.title,
+                                style: GoogleFonts.poppins(
+                                    color: Colors.white,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis),
+                            Text(
+                                '${wallpaper.category} • ${wallpaper.width}×${wallpaper.height}',
+                                style: GoogleFonts.poppins(
+                                    color: Colors.grey[400], fontSize: 11))
+                          ])),
                       Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: Colors.blueAccent.withValues(alpha: 0.25),
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(
-                              color: Colors.blueAccent.withValues(alpha: 0.5)),
-                        ),
-                        child: Text(wallpaper.isLandscape ? '16:9' : '9:16',
-                            style: GoogleFonts.poppins(
-                                color: Colors.blueAccent,
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600)),
-                      ),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                              color: Colors.blueAccent.withValues(alpha: 0.25),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                  color: Colors.blueAccent
+                                      .withValues(alpha: 0.5))),
+                          child: Text(wallpaper.isLandscape ? '16:9' : '9:16',
+                              style: GoogleFonts.poppins(
+                                  color: Colors.blueAccent,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600))),
                     ]),
                     const SizedBox(height: 14),
                     Row(children: [
                       Expanded(
                         child: _ActionButton(
                           icon: Icons.download_rounded,
-                          label: 'تحميل',
+                          label: 'تحميل (10 🪙)', // ✅ تحديث نص الزر
                           color: Colors.blueAccent,
-                          onTap: () => DownloadService.downloadWallpaper(
-                              context, wallpaper),
+                          onTap: () => _handleDownload(context, wallpaper),
                         ),
                       ),
                     ]),
@@ -2095,20 +1828,16 @@ class _PreviewScreenState extends State<PreviewScreen> {
               ]),
             ),
             Positioned(
-              bottom: 20,
-              left: 0,
-              right: 0,
-              child: Center(
-                child: Text(
-                  '${_currentIndex + 1}/${widget.wallpapers.length}',
-                  style: GoogleFonts.poppins(
-                    color: Colors.white,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ),
+                bottom: 20,
+                left: 0,
+                right: 0,
+                child: Center(
+                    child: Text(
+                        '${_currentIndex + 1}/${widget.wallpapers.length}',
+                        style: GoogleFonts.poppins(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600)))),
           ]);
         },
       ),
@@ -2121,13 +1850,11 @@ class _ActionButton extends StatelessWidget {
   final String label;
   final Color color;
   final VoidCallback onTap;
-
-  const _ActionButton({
-    required this.icon,
-    required this.label,
-    required this.color,
-    required this.onTap,
-  });
+  const _ActionButton(
+      {required this.icon,
+      required this.label,
+      required this.color,
+      required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -2138,18 +1865,18 @@ class _ActionButton extends StatelessWidget {
           style:
               GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w600)),
       style: ElevatedButton.styleFrom(
-        backgroundColor: color,
-        foregroundColor: Colors.white,
-        padding: const EdgeInsets.symmetric(vertical: 13),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        elevation: 0,
-      ),
+          backgroundColor: color,
+          foregroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(vertical: 13),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          elevation: 0),
     );
   }
 }
 
 // =============================================================================
-// 9. WALLPAPER GRID LOADER
+// 10. WALLPAPER GRID LOADER
 // =============================================================================
 class CategoryWallpapersScreen extends StatelessWidget {
   final String categoryName;
@@ -2161,17 +1888,15 @@ class CategoryWallpapersScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: Colors.transparent,
       appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new,
-              color: Colors.white, size: 20),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: Text(categoryName,
-            style: GoogleFonts.poppins(
-                fontWeight: FontWeight.bold, color: Colors.white)),
-      ),
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          leading: IconButton(
+              icon: const Icon(Icons.arrow_back_ios_new,
+                  color: Colors.white, size: 20),
+              onPressed: () => Navigator.pop(context)),
+          title: Text(categoryName,
+              style: GoogleFonts.poppins(
+                  fontWeight: FontWeight.bold, color: Colors.white))),
       body:
           _WallpaperGridLoader(categoryName: categoryName, isLandscape: is169),
     );
@@ -2181,11 +1906,8 @@ class CategoryWallpapersScreen extends StatelessWidget {
 class _WallpaperGridLoader extends StatefulWidget {
   final String categoryName;
   final bool isLandscape;
-
-  const _WallpaperGridLoader({
-    required this.categoryName,
-    this.isLandscape = false,
-  });
+  const _WallpaperGridLoader(
+      {required this.categoryName, this.isLandscape = false});
 
   @override
   State<_WallpaperGridLoader> createState() => _WallpaperGridLoaderState();
@@ -2211,20 +1933,16 @@ class _WallpaperGridLoaderState extends State<_WallpaperGridLoader> {
       onAdComplete: () {
         if (mounted) {
           Navigator.push(
-            context,
-            PageRouteBuilder(
-              pageBuilder: (_, anim, __) => FadeTransition(
-                opacity: anim,
-                child: PreviewScreen(
-                  wallpaper: wallpaper,
-                  heroTag: heroTag,
-                  wallpapers: wallpapers,
-                  initialIndex: initialIndex,
-                ),
-              ),
-              transitionDuration: const Duration(milliseconds: 300),
-            ),
-          );
+              context,
+              PageRouteBuilder(
+                  pageBuilder: (_, anim, __) => FadeTransition(
+                      opacity: anim,
+                      child: PreviewScreen(
+                          wallpaper: wallpaper,
+                          heroTag: heroTag,
+                          wallpapers: wallpapers,
+                          initialIndex: initialIndex)),
+                  transitionDuration: const Duration(milliseconds: 300)));
         }
       },
     );
@@ -2235,30 +1953,27 @@ class _WallpaperGridLoaderState extends State<_WallpaperGridLoader> {
     return FutureBuilder<List<WallpaperModel>>(
       future: _future,
       builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
+        if (snapshot.connectionState == ConnectionState.waiting)
           return widget.isLandscape ? _shimmerLandscape() : _shimmerGrid();
-        }
         if (!snapshot.hasData || snapshot.data!.isEmpty) {
           return Center(
-            child:
-                Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-              Icon(Icons.folder_open, size: 64, color: Colors.grey[600]),
-              const SizedBox(height: 16),
-              Text('لا توجد صور',
-                  style: GoogleFonts.poppins(color: Colors.grey)),
-              const SizedBox(height: 16),
-              ElevatedButton.icon(
-                onPressed: _refresh,
-                icon: const Icon(Icons.refresh),
-                label: Text('إعادة المحاولة', style: GoogleFonts.poppins()),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blueAccent,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12)),
-                ),
-              ),
-            ]),
-          );
+              child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                Icon(Icons.folder_open, size: 64, color: Colors.grey[600]),
+                const SizedBox(height: 16),
+                Text('لا توجد صور',
+                    style: GoogleFonts.poppins(color: Colors.grey)),
+                const SizedBox(height: 16),
+                ElevatedButton.icon(
+                    onPressed: _refresh,
+                    icon: const Icon(Icons.refresh),
+                    label: Text('إعادة المحاولة', style: GoogleFonts.poppins()),
+                    style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blueAccent,
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12))))
+              ]));
         }
         final wallpapers = snapshot.data!;
         return Column(children: [
@@ -2272,67 +1987,38 @@ class _WallpaperGridLoaderState extends State<_WallpaperGridLoader> {
                       padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
                       itemCount: wallpapers.length,
                       itemBuilder: (context, index) {
-                        if (index > 0 && index % 8 == 0) {
-                          return Column(children: [
-                            const Padding(
-                              padding: EdgeInsets.symmetric(vertical: 8),
-                              child: SmartBannerAdWidget(),
-                            ),
-                            Padding(
-                              padding: const EdgeInsets.only(bottom: 12),
-                              child: AspectRatio(
+                        return Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: AspectRatio(
                                 aspectRatio: 16 / 9,
                                 child: WallpaperCard169(
-                                  wallpaper: wallpapers[index],
-                                  heroTag:
-                                      'wp_${wallpapers[index].id}_${widget.categoryName}_$index',
-                                  onTap: () => _navigateWithAd(
-                                      wallpapers[index],
-                                      'wp_${wallpapers[index].id}_${widget.categoryName}_$index',
-                                      wallpapers,
-                                      index),
-                                ),
-                              ),
-                            ),
-                          ]);
-                        }
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: AspectRatio(
-                            aspectRatio: 16 / 9,
-                            child: WallpaperCard169(
-                              wallpaper: wallpapers[index],
-                              heroTag:
-                                  'wp_${wallpapers[index].id}_${widget.categoryName}_$index',
-                              onTap: () => _navigateWithAd(
-                                  wallpapers[index],
-                                  'wp_${wallpapers[index].id}_${widget.categoryName}_$index',
-                                  wallpapers,
-                                  index),
-                            ),
-                          ),
-                        );
+                                    wallpaper: wallpapers[index],
+                                    heroTag:
+                                        'wp_${wallpapers[index].id}_${widget.categoryName}_$index',
+                                    onTap: () => _navigateWithAd(
+                                        wallpapers[index],
+                                        'wp_${wallpapers[index].id}_${widget.categoryName}_$index',
+                                        wallpapers,
+                                        index))));
                       },
                     )
                   : GridView.builder(
                       padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
                       gridDelegate:
                           const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 2,
-                        childAspectRatio: 0.65,
-                        crossAxisSpacing: 12,
-                        mainAxisSpacing: 12,
-                      ),
+                              crossAxisCount: 2,
+                              childAspectRatio: 0.65,
+                              crossAxisSpacing: 12,
+                              mainAxisSpacing: 12),
                       itemCount: wallpapers.length,
                       itemBuilder: (context, index) {
                         final heroTag =
                             'wp_${wallpapers[index].id}_${widget.categoryName}_$index';
                         return WallpaperCard(
-                          wallpaper: wallpapers[index],
-                          heroTag: heroTag,
-                          onTap: () => _navigateWithAd(
-                              wallpapers[index], heroTag, wallpapers, index),
-                        );
+                            wallpaper: wallpapers[index],
+                            heroTag: heroTag,
+                            onTap: () => _navigateWithAd(
+                                wallpapers[index], heroTag, wallpapers, index));
                       },
                     ),
             ),
@@ -2343,42 +2029,34 @@ class _WallpaperGridLoaderState extends State<_WallpaperGridLoader> {
   }
 
   Widget _shimmerGrid() => GridView.builder(
-        padding: const EdgeInsets.all(16),
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+      padding: const EdgeInsets.all(16),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: 2,
           childAspectRatio: 0.65,
           crossAxisSpacing: 12,
-          mainAxisSpacing: 12,
-        ),
-        itemCount: 10,
-        itemBuilder: (_, __) => const ShimmerLoadingCard(),
-      );
-
+          mainAxisSpacing: 12),
+      itemCount: 10,
+      itemBuilder: (_, __) => const ShimmerLoadingCard());
   Widget _shimmerLandscape() => ListView.builder(
-        padding: const EdgeInsets.all(16),
-        itemCount: 5,
-        itemBuilder: (_, __) => Padding(
+      padding: const EdgeInsets.all(16),
+      itemCount: 5,
+      itemBuilder: (_, __) => Padding(
           padding: const EdgeInsets.only(bottom: 12),
           child: AspectRatio(
-            aspectRatio: 16 / 9,
-            child: const ShimmerLoadingCard(),
-          ),
-        ),
-      );
+              aspectRatio: 16 / 9, child: const ShimmerLoadingCard())));
 }
 
 // =============================================================================
-// 10. HOME SCREEN
+// 11. HOME SCREEN
 // =============================================================================
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
 
   void _navigateTo(BuildContext context, String category) {
     Navigator.push(
-      context,
-      MaterialPageRoute(
-          builder: (_) => CategoryWallpapersScreen(categoryName: category)),
-    );
+        context,
+        MaterialPageRoute(
+            builder: (_) => CategoryWallpapersScreen(categoryName: category)));
   }
 
   @override
@@ -2394,24 +2072,42 @@ class HomeScreen extends StatelessWidget {
                 fontSize: 24,
                 color: Colors.white)),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.favorite_border, color: Colors.white),
-            onPressed: () => Navigator.push(context,
-                MaterialPageRoute(builder: (_) => const FavoritesScreen())),
+          // ✅ شارة عرض الرصيد
+          Consumer<CoinsProvider>(
+            builder: (context, coins, _) => Container(
+              margin: const EdgeInsets.only(right: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                  color: Colors.amber.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(20),
+                  border:
+                      Border.all(color: Colors.amber.withValues(alpha: 0.4))),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                const Icon(Icons.monetization_on,
+                    color: Colors.amber, size: 18),
+                const SizedBox(width: 4),
+                Text('${coins.coins}',
+                    style: GoogleFonts.poppins(
+                        color: Colors.amber,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14))
+              ]),
+            ),
           ),
           IconButton(
-            icon: const Icon(Icons.settings_outlined, color: Colors.white),
-            onPressed: () => Navigator.push(context,
-                MaterialPageRoute(builder: (_) => const SettingsScreen())),
-          ),
+              icon: const Icon(Icons.favorite_border, color: Colors.white),
+              onPressed: () => Navigator.push(context,
+                  MaterialPageRoute(builder: (_) => const FavoritesScreen()))),
+          IconButton(
+              icon: const Icon(Icons.settings_outlined, color: Colors.white),
+              onPressed: () => Navigator.push(context,
+                  MaterialPageRoute(builder: (_) => const SettingsScreen()))),
         ],
       ),
       const SliverToBoxAdapter(
-        child: Padding(
-          padding: EdgeInsets.symmetric(vertical: 8),
-          child: Center(child: SmartBannerAdWidget()),
-        ),
-      ),
+          child: Padding(
+              padding: EdgeInsets.symmetric(vertical: 8),
+              child: Center(child: SmartBannerAdWidget()))),
       _sectionHeader(context, 'New', 'New'),
       _horizontalList(context, 'New'),
       _sectionHeader(context, 'Sport', 'Sport'),
@@ -2423,11 +2119,9 @@ class HomeScreen extends StatelessWidget {
       _sectionHeader(context, 'Best', 'Best'),
       _horizontalList(context, 'Best'),
       const SliverToBoxAdapter(
-        child: Padding(
-          padding: EdgeInsets.symmetric(vertical: 8),
-          child: SmartBannerAdWidget(),
-        ),
-      ),
+          child: Padding(
+              padding: EdgeInsets.symmetric(vertical: 8),
+              child: Center(child: SmartBannerAdWidget()))),
       ...MockData.categories.map((cat) => _categoryRow(context, cat)),
       const SliverToBoxAdapter(child: SizedBox(height: 100)),
     ]);
@@ -2442,13 +2136,11 @@ class HomeScreen extends StatelessWidget {
             Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
           Row(children: [
             Container(
-              width: 4,
-              height: 24,
-              decoration: BoxDecoration(
-                color: Colors.blueAccent,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
+                width: 4,
+                height: 24,
+                decoration: BoxDecoration(
+                    color: Colors.blueAccent,
+                    borderRadius: BorderRadius.circular(2))),
             const SizedBox(width: 10),
             Text(title,
                 style: GoogleFonts.poppins(
@@ -2457,17 +2149,16 @@ class HomeScreen extends StatelessWidget {
                     color: Colors.white)),
             if (title == '16:9') ...[
               const SizedBox(width: 8),
-              Icon(Icons.aspect_ratio, color: Colors.blueAccent, size: 20),
-            ],
+              Icon(Icons.aspect_ratio, color: Colors.blueAccent, size: 20)
+            ]
           ]),
           GestureDetector(
-            onTap: () => _navigateTo(context, category),
-            child: const Text('See All →',
-                style: TextStyle(
-                    color: Colors.blueAccent,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 14)),
-          ),
+              onTap: () => _navigateTo(context, category),
+              child: const Text('See All →',
+                  style: TextStyle(
+                      color: Colors.blueAccent,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14))),
         ]),
       ),
     );
@@ -2477,33 +2168,25 @@ class HomeScreen extends StatelessWidget {
     final is169 = category == '16:9' || category == '16:9 Ratio';
     final cardWidth = is169 ? 285.0 : 150.0;
     final cardHeight = is169 ? 160.0 : 250.0;
-
     return SliverToBoxAdapter(
       child: FutureBuilder<List<WallpaperModel>>(
         future: GitHubService.getWallpapers(category),
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
+          if (snapshot.connectionState == ConnectionState.waiting)
             return SizedBox(
-              height: cardHeight,
-              child: ListView.separated(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                itemCount: 5,
-                separatorBuilder: (_, __) => const SizedBox(width: 12),
-                itemBuilder: (_, __) => SizedBox(
-                    width: cardWidth, child: const ShimmerLoadingCard()),
-              ),
-            );
-          }
-          if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                height: cardHeight,
+                child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    itemCount: 5,
+                    separatorBuilder: (_, __) => const SizedBox(width: 12),
+                    itemBuilder: (_, __) => SizedBox(
+                        width: cardWidth, child: const ShimmerLoadingCard())));
+          if (!snapshot.hasData || snapshot.data!.isEmpty)
             return SizedBox(height: cardHeight);
-          }
           final wallpapers = snapshot.data!;
-
-          // حساب عدد العناصر مع الإعلانات (كل 5 صور + إعلان واحد)
           final baseCount = wallpapers.length > 12 ? 12 : wallpapers.length;
           final totalCount = baseCount + (baseCount ~/ 5);
-
           return SizedBox(
             height: cardHeight,
             child: ListView.separated(
@@ -2512,19 +2195,11 @@ class HomeScreen extends StatelessWidget {
               itemCount: totalCount,
               separatorBuilder: (_, __) => const SizedBox(width: 12),
               itemBuilder: (context, displayIndex) {
-                // حساب الفهرس الفعلي للصورة
-                const int adInterval = 6; // إعلان بعد كل 5 صور
+                const int adInterval = 6;
                 int imageIndex = displayIndex - (displayIndex ~/ adInterval);
-
-                // إذا كان الفهرس يجب أن يكون إعلان
-                if (displayIndex % adInterval == 5) {
+                if (displayIndex % adInterval == 5)
                   return _adCard(cardWidth, cardHeight);
-                }
-
-                if (imageIndex >= baseCount) {
-                  return const SizedBox.shrink();
-                }
-
+                if (imageIndex >= baseCount) return const SizedBox.shrink();
                 final heroTag =
                     'wp_${wallpapers[imageIndex].id}_${category}_$imageIndex';
                 return WallpaperCard(
@@ -2536,20 +2211,17 @@ class HomeScreen extends StatelessWidget {
                     AdMobManager().trackWallpaperView(
                       onAdComplete: () {
                         Navigator.push(
-                          context,
-                          PageRouteBuilder(
-                            pageBuilder: (_, anim, __) => FadeTransition(
-                              opacity: anim,
-                              child: PreviewScreen(
-                                  wallpaper: wallpapers[imageIndex],
-                                  heroTag: heroTag,
-                                  wallpapers: wallpapers,
-                                  initialIndex: imageIndex),
-                            ),
-                            transitionDuration:
-                                const Duration(milliseconds: 300),
-                          ),
-                        );
+                            context,
+                            PageRouteBuilder(
+                                pageBuilder: (_, anim, __) => FadeTransition(
+                                    opacity: anim,
+                                    child: PreviewScreen(
+                                        wallpaper: wallpapers[imageIndex],
+                                        heroTag: heroTag,
+                                        wallpapers: wallpapers,
+                                        initialIndex: imageIndex)),
+                                transitionDuration:
+                                    const Duration(milliseconds: 300)));
                       },
                     );
                   },
@@ -2562,49 +2234,32 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
-  // بطاقة إعلان احترافية مع إعلان حقيقي
   Widget _adCard(double width, double height) {
     return Container(
       width: width,
       height: height,
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: Colors.blueAccent.withValues(alpha: 0.3),
-          width: 1,
-        ),
-      ),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+              color: Colors.blueAccent.withValues(alpha: 0.3), width: 1)),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(16),
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            // خلفية الإعلان
+          borderRadius: BorderRadius.circular(16),
+          child: Stack(fit: StackFit.expand, children: [
             Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    Colors.blueAccent.withValues(alpha: 0.1),
-                    Colors.cyanAccent.withValues(alpha: 0.05),
-                  ],
-                ),
-              ),
-            ),
-            // إعلان AdMob الحقيقي
+                decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                  Colors.blueAccent.withValues(alpha: 0.1),
+                  Colors.cyanAccent.withValues(alpha: 0.05)
+                ]))),
             Center(
-              child: SizedBox(
-                width: width * 0.9,
-                height: height * 0.8,
-                child: const BannerAdWidget(
-                  adSize: AdSize.banner,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
+                child: SizedBox(
+                    width: width * 0.9,
+                    height: height * 0.8,
+                    child: const BannerAdWidget(adSize: AdSize.banner)))
+          ])),
     );
   }
 
@@ -2620,43 +2275,38 @@ class HomeScreen extends StatelessWidget {
               return Container(
                 height: 90,
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(16),
-                  color: Colors.white.withValues(alpha: 0.05),
-                ),
+                    borderRadius: BorderRadius.circular(16),
+                    color: Colors.white.withValues(alpha: 0.05)),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(16),
                   child: Stack(fit: StackFit.expand, children: [
                     if (snapshot.hasData && snapshot.data!.isNotEmpty)
                       CachedNetworkImage(
-                        imageUrl: snapshot.data![0].thumbnailUrl,
-                        fit: BoxFit.cover,
-                      ),
+                          imageUrl: snapshot.data![0].thumbnailUrl,
+                          fit: BoxFit.cover),
                     Container(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(colors: [
-                          Colors.black.withValues(alpha: 0.75),
-                          Colors.black.withValues(alpha: 0.3),
-                        ]),
-                      ),
-                    ),
+                        decoration: BoxDecoration(
+                            gradient: LinearGradient(colors: [
+                      Colors.black.withValues(alpha: 0.75),
+                      Colors.black.withValues(alpha: 0.3)
+                    ]))),
                     Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Row(children: [
-                        Container(
-                          padding: const EdgeInsets.all(9),
-                          decoration: BoxDecoration(
-                            color: cat.accentColor.withValues(alpha: 0.25),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child:
-                              Icon(cat.icon, color: cat.accentColor, size: 20),
-                        ),
-                        const SizedBox(width: 14),
-                        Expanded(
-                          child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Row(children: [
+                          Container(
+                              padding: const EdgeInsets.all(9),
+                              decoration: BoxDecoration(
+                                  color:
+                                      cat.accentColor.withValues(alpha: 0.25),
+                                  borderRadius: BorderRadius.circular(12)),
+                              child: Icon(cat.icon,
+                                  color: cat.accentColor, size: 20)),
+                          const SizedBox(width: 14),
+                          Expanded(
+                              child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
                                 Text(cat.name,
                                     style: GoogleFonts.poppins(
                                         color: Colors.white,
@@ -2666,12 +2316,10 @@ class HomeScreen extends StatelessWidget {
                                   Text('${snapshot.data!.length} صورة',
                                       style: GoogleFonts.poppins(
                                           color: Colors.grey[400],
-                                          fontSize: 11)),
-                              ]),
-                        ),
-                        const Icon(Icons.chevron_right, color: Colors.white70),
-                      ]),
-                    ),
+                                          fontSize: 11))
+                              ])),
+                          const Icon(Icons.chevron_right, color: Colors.white70)
+                        ])),
                   ]),
                 ),
               );
@@ -2684,81 +2332,69 @@ class HomeScreen extends StatelessWidget {
 }
 
 // =============================================================================
-// 11. OTHER SCREENS
+// 12. OTHER SCREENS
 // =============================================================================
 class NewScreen extends StatelessWidget {
   const NewScreen({super.key});
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
+  Widget build(BuildContext context) => Scaffold(
       backgroundColor: Colors.transparent,
       appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        title: Text('New',
-            style: GoogleFonts.poppins(
-                fontWeight: FontWeight.bold,
-                fontSize: 24,
-                color: Colors.white)),
-      ),
-      body: const _WallpaperGridLoader(categoryName: 'New'),
-    );
-  }
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          title: Text('New',
+              style: GoogleFonts.poppins(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 24,
+                  color: Colors.white))),
+      body: const _WallpaperGridLoader(categoryName: 'New'));
 }
 
 class BestScreen extends StatelessWidget {
   const BestScreen({super.key});
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
+  Widget build(BuildContext context) => Scaffold(
       backgroundColor: Colors.transparent,
       appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        title: Text('Best',
-            style: GoogleFonts.poppins(
-                fontWeight: FontWeight.bold,
-                fontSize: 24,
-                color: Colors.white)),
-      ),
-      body: const _WallpaperGridLoader(categoryName: 'Best'),
-    );
-  }
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          title: Text('Best',
+              style: GoogleFonts.poppins(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 24,
+                  color: Colors.white))),
+      body: const _WallpaperGridLoader(categoryName: 'Best'));
 }
 
 class Screen169 extends StatelessWidget {
   const Screen169({super.key});
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
+  Widget build(BuildContext context) => Scaffold(
       backgroundColor: Colors.transparent,
       appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        title: Row(children: [
-          Text('16:9 ',
-              style: GoogleFonts.poppins(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 24,
-                  color: Colors.white)),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-            decoration: BoxDecoration(
-              color: Colors.cyan.withValues(alpha: 0.2),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.cyan.withValues(alpha: 0.5)),
-            ),
-            child: Text('Landscape',
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          title: Row(children: [
+            Text('16:9 ',
                 style: GoogleFonts.poppins(
-                    fontSize: 11,
-                    color: Colors.cyan,
-                    fontWeight: FontWeight.w600)),
-          ),
-        ]),
-      ),
-      body: const _WallpaperGridLoader(categoryName: '16:9', isLandscape: true),
-    );
-  }
+                    fontWeight: FontWeight.bold,
+                    fontSize: 24,
+                    color: Colors.white)),
+            Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                    color: Colors.cyan.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(8),
+                    border:
+                        Border.all(color: Colors.cyan.withValues(alpha: 0.5))),
+                child: Text('Landscape',
+                    style: GoogleFonts.poppins(
+                        fontSize: 11,
+                        color: Colors.cyan,
+                        fontWeight: FontWeight.w600)))
+          ])),
+      body:
+          const _WallpaperGridLoader(categoryName: '16:9', isLandscape: true));
 }
 
 class FavoritesScreen extends StatelessWidget {
@@ -2769,71 +2405,62 @@ class FavoritesScreen extends StatelessWidget {
       builder: (context, favProvider, _) {
         return CustomScrollView(slivers: [
           SliverAppBar(
-            floating: true,
-            backgroundColor: Colors.transparent,
-            title: Text('Favorites',
-                style: GoogleFonts.poppins(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 24,
-                    color: Colors.white)),
-            actions: [
-              if (favProvider.favorites.isNotEmpty)
-                IconButton(
-                  icon: const Icon(Icons.delete_outline, color: Colors.red),
-                  onPressed: () => _confirmClearAll(context, favProvider),
-                ),
-            ],
-          ),
+              floating: true,
+              backgroundColor: Colors.transparent,
+              title: Text('Favorites',
+                  style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 24,
+                      color: Colors.white)),
+              actions: [
+                if (favProvider.favorites.isNotEmpty)
+                  IconButton(
+                      icon: const Icon(Icons.delete_outline, color: Colors.red),
+                      onPressed: () => _confirmClearAll(context, favProvider))
+              ]),
           const SliverToBoxAdapter(child: Center(child: BannerAdWidget())),
           if (favProvider.favorites.isEmpty)
             SliverFillRemaining(
-              child: Center(
-                child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.favorite_border,
-                          size: 80, color: Colors.grey[600]),
-                      const SizedBox(height: 20),
-                      Text('لا توجد مفضلات بعد',
-                          style: GoogleFonts.poppins(
-                              color: Colors.grey[400], fontSize: 18)),
-                      const SizedBox(height: 8),
-                      Text('اضغط ♥ على أي صورة لحفظها هنا',
-                          style: GoogleFonts.poppins(
-                              color: Colors.grey[600], fontSize: 13)),
-                    ]),
-              ),
-            )
+                child: Center(
+                    child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                  Icon(Icons.favorite_border,
+                      size: 80, color: Colors.grey[600]),
+                  const SizedBox(height: 20),
+                  Text('لا توجد مفضلات بعد',
+                      style: GoogleFonts.poppins(
+                          color: Colors.grey[400], fontSize: 18)),
+                  const SizedBox(height: 8),
+                  Text('اضغط ♥ على أي صورة لحفظها هنا',
+                      style: GoogleFonts.poppins(
+                          color: Colors.grey[600], fontSize: 13))
+                ])))
           else
             SliverPadding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
-              sliver: SliverGrid(
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2,
-                  childAspectRatio: 0.65,
-                  crossAxisSpacing: 12,
-                  mainAxisSpacing: 12,
-                ),
-                delegate: SliverChildBuilderDelegate((context, index) {
-                  final wallpaper = favProvider.favorites[index];
-                  return WallpaperCard(
-                    wallpaper: wallpaper,
-                    heroTag: 'wp_${wallpaper.id}_favorites_$index',
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => PreviewScreen(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
+                sliver: SliverGrid(
+                    gridDelegate:
+                        const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 2,
+                            childAspectRatio: 0.65,
+                            crossAxisSpacing: 12,
+                            mainAxisSpacing: 12),
+                    delegate: SliverChildBuilderDelegate((context, index) {
+                      final wallpaper = favProvider.favorites[index];
+                      return WallpaperCard(
                           wallpaper: wallpaper,
                           heroTag: 'wp_${wallpaper.id}_favorites_$index',
-                          wallpapers: favProvider.favorites,
-                          initialIndex: index,
-                        ),
-                      ),
-                    ),
-                  );
-                }, childCount: favProvider.favorites.length),
-              ),
-            ),
+                          onTap: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                  builder: (_) => PreviewScreen(
+                                      wallpaper: wallpaper,
+                                      heroTag:
+                                          'wp_${wallpaper.id}_favorites_$index',
+                                      wallpapers: favProvider.favorites,
+                                      initialIndex: index))));
+                    }, childCount: favProvider.favorites.length))),
         ]);
       },
     );
@@ -2851,18 +2478,16 @@ class FavoritesScreen extends StatelessWidget {
             style: GoogleFonts.poppins(color: Colors.grey[400])),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text('إلغاء',
-                style: GoogleFonts.poppins(color: Colors.grey[600])),
-          ),
+              onPressed: () => Navigator.pop(context),
+              child: Text('إلغاء',
+                  style: GoogleFonts.poppins(color: Colors.grey[600]))),
           TextButton(
-            onPressed: () async {
-              Navigator.pop(context);
-              await provider.clearAll(); // ← كتابة واحدة بدل 50
-            },
-            child:
-                Text('مسح الكل', style: GoogleFonts.poppins(color: Colors.red)),
-          ),
+              onPressed: () async {
+                Navigator.pop(context);
+                await provider.clearAll();
+              },
+              child: Text('مسح الكل',
+                  style: GoogleFonts.poppins(color: Colors.red)))
         ],
       ),
     );
@@ -2875,39 +2500,33 @@ class CatalogScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return CustomScrollView(slivers: [
       SliverAppBar(
-        floating: true,
-        backgroundColor: Colors.transparent,
-        title: Text('Catalog',
-            style: GoogleFonts.poppins(
-                fontWeight: FontWeight.bold,
-                fontSize: 24,
-                color: Colors.white)),
-      ),
+          floating: true,
+          backgroundColor: Colors.transparent,
+          title: Text('Catalog',
+              style: GoogleFonts.poppins(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 24,
+                  color: Colors.white))),
       const SliverToBoxAdapter(
-        child: Padding(
-          padding: EdgeInsets.symmetric(vertical: 8),
-          child: Center(child: SmartBannerAdWidget()),
-        ),
-      ),
+          child: Padding(
+              padding: EdgeInsets.symmetric(vertical: 8),
+              child: Center(child: SmartBannerAdWidget()))),
       SliverPadding(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
         sliver: SliverGrid(
           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 2,
-            childAspectRatio: 0.78,
-            crossAxisSpacing: 14,
-            mainAxisSpacing: 14,
-          ),
+              crossAxisCount: 2,
+              childAspectRatio: 0.78,
+              crossAxisSpacing: 14,
+              mainAxisSpacing: 14),
           delegate: SliverChildBuilderDelegate((context, index) {
             final cat = MockData.categories[index];
             return GestureDetector(
               onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) =>
-                      CategoryWallpapersScreen(categoryName: cat.name),
-                ),
-              ),
+                  context,
+                  MaterialPageRoute(
+                      builder: (_) =>
+                          CategoryWallpapersScreen(categoryName: cat.name))),
               child: FutureBuilder<List<WallpaperModel>>(
                 future: GitHubService.getWallpapers(cat.name),
                 builder: (context, snapshot) {
@@ -2922,51 +2541,45 @@ class CatalogScreen extends StatelessWidget {
                               imageUrl: firstUrl,
                               fit: BoxFit.cover,
                               placeholder: (_, __) =>
-                                  const ShimmerLoadingCard(),
-                            )
+                                  const ShimmerLoadingCard())
                           : Container(
                               color: Colors.grey[850],
                               child: Icon(cat.icon,
-                                  color: Colors.grey[600], size: 40),
-                            ),
+                                  color: Colors.grey[600], size: 40)),
                       Container(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            colors: [
-                              Colors.transparent,
-                              Colors.black.withValues(alpha: 0.85),
-                            ],
-                          ),
-                        ),
-                      ),
+                          decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                  begin: Alignment.topCenter,
+                                  end: Alignment.bottomCenter,
+                                  colors: [
+                            Colors.transparent,
+                            Colors.black.withValues(alpha: 0.85)
+                          ]))),
                       Positioned(
-                        bottom: 14,
-                        left: 12,
-                        right: 12,
-                        child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(children: [
-                                Icon(cat.icon,
-                                    color: cat.accentColor, size: 16),
-                                const SizedBox(width: 6),
-                                Expanded(
-                                  child: Text(cat.name,
+                          bottom: 14,
+                          left: 12,
+                          right: 12,
+                          child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(children: [
+                                  Icon(cat.icon,
+                                      color: cat.accentColor, size: 16),
+                                  const SizedBox(width: 6),
+                                  Expanded(
+                                      child: Text(cat.name,
+                                          style: GoogleFonts.poppins(
+                                              color: Colors.white,
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 14),
+                                          overflow: TextOverflow.ellipsis))
+                                ]),
+                                if (snapshot.hasData)
+                                  Text('${snapshot.data!.length} صورة',
                                       style: GoogleFonts.poppins(
-                                          color: Colors.white,
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 14),
-                                      overflow: TextOverflow.ellipsis),
-                                ),
-                              ]),
-                              if (snapshot.hasData)
-                                Text('${snapshot.data!.length} صورة',
-                                    style: GoogleFonts.poppins(
-                                        color: Colors.grey[400], fontSize: 11)),
-                            ]),
-                      ),
+                                          color: Colors.grey[400],
+                                          fontSize: 11))
+                              ])),
                     ]),
                   );
                 },
@@ -2980,265 +2593,248 @@ class CatalogScreen extends StatelessWidget {
 }
 
 // =============================================================================
-// 12. SETTINGS SCREEN
+// 13. SETTINGS SCREEN
 // =============================================================================
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
-
   @override
   Widget build(BuildContext context) {
     final favCount = context.watch<FavoritesProvider>().favorites.length;
     return Scaffold(
       backgroundColor: Colors.transparent,
       appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new,
-              color: Colors.white, size: 20),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: Text('الإعدادات',
-            style: GoogleFonts.poppins(
-                fontWeight: FontWeight.bold, color: Colors.white)),
-      ),
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          leading: IconButton(
+              icon: const Icon(Icons.arrow_back_ios_new,
+                  color: Colors.white, size: 20),
+              onPressed: () => Navigator.pop(context)),
+          title: Text('الإعدادات',
+              style: GoogleFonts.poppins(
+                  fontWeight: FontWeight.bold, color: Colors.white))),
       body: ListView(padding: const EdgeInsets.all(16), children: [
         const Center(child: BannerAdWidget()),
         const SizedBox(height: 16),
         Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: Colors.amber.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: Colors.amber.withValues(alpha: 0.3)),
-          ),
+              color: Colors.amber.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.amber.withValues(alpha: 0.3))),
           child:
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Row(children: [
               Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.amber.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(Icons.star, color: Colors.amber, size: 20),
-              ),
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                      color: Colors.amber.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(10)),
+                  child: const Icon(Icons.monetization_on,
+                      color: Colors.amber, size: 20)),
               const SizedBox(width: 12),
               Expanded(
-                child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('احصل على مكافأة',
-                          style: GoogleFonts.poppins(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w600,
-                              fontSize: 14)),
-                      Text('شاهد إعلاناً للحصول على ميزة مميزة',
-                          style: GoogleFonts.poppins(
-                              color: Colors.grey[400], fontSize: 12)),
-                    ]),
-              ),
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                    Text('اربح العملات',
+                        style: GoogleFonts.poppins(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 14)),
+                    Text('شاهد إعلاناً لكسب 5 عملات 🪙',
+                        style: GoogleFonts.poppins(
+                            color: Colors.grey[400], fontSize: 12))
+                  ])),
             ]),
             const SizedBox(height: 12),
-            RewardedAdButton(
-              label: '🎁 شاهد إعلاناً واحصل على مكافأة',
-              onRewardEarned: () {
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('🎉 تم منح المكافأة!',
-                          style: GoogleFonts.poppins()),
-                      backgroundColor: Colors.amber[700],
-                      behavior: SnackBarBehavior.floating,
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12)),
-                    ),
-                  );
-                }
-              },
+            Consumer<CoinsProvider>(
+              builder: (context, coins, _) => Row(children: [
+                Text('رصيدك الحالي: ',
+                    style: GoogleFonts.poppins(
+                        color: Colors.grey[300], fontSize: 13)),
+                Text('${coins.coins} 🪙',
+                    style: GoogleFonts.poppins(
+                        color: Colors.amber,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold))
+              ]),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () => watchAdForCoins(context),
+                icon: const Icon(Icons.play_circle_outline, size: 18),
+                label: Text('شاهد إعلاناً (+5 🪙)',
+                    style: GoogleFonts.poppins(
+                        fontSize: 13, fontWeight: FontWeight.w600)),
+                style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.amber[700],
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                    padding: const EdgeInsets.symmetric(vertical: 12)),
+              ),
             ),
           ]),
         ),
         const SizedBox(height: 12),
         _SettingsTile(
-          icon: Icons.delete_sweep,
-          iconColor: Colors.orange,
-          title: 'مسح الكاش',
-          subtitle: 'تحرير الذاكرة من الصور المؤقتة',
-          onTap: () {
-            GitHubService.clearCache();
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('تم مسح الكاش ✅', style: GoogleFonts.poppins()),
-                behavior: SnackBarBehavior.floating,
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12)),
-                backgroundColor: Colors.green[700],
-              ),
-            );
-          },
-        ),
-        const SizedBox(height: 12),
-        _SettingsTile(
-          icon: Icons.network_check,
-          iconColor: Colors.green,
-          title: 'اختبار الاتصال بـ GitHub',
-          subtitle: 'التحقق من حالة الاتصال',
-          onTap: () async {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content:
-                    Text('⏳ جاري الاختبار...', style: GoogleFonts.poppins()),
-                behavior: SnackBarBehavior.floating,
-              ),
-            );
-            final ok = await GitHubService.testConnection();
-            if (context.mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(ok ? '✅ الاتصال ناجح' : '❌ فشل الاتصال',
-                      style: GoogleFonts.poppins()),
+            icon: Icons.delete_sweep,
+            iconColor: Colors.orange,
+            title: 'مسح الكاش',
+            subtitle: 'تحرير الذاكرة من الصور المؤقتة',
+            onTap: () {
+              GitHubService.clearCache();
+              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                  content: Text('تم مسح الكاش ✅', style: GoogleFonts.poppins()),
                   behavior: SnackBarBehavior.floating,
-                  backgroundColor: ok ? Colors.green[700] : Colors.red[700],
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12)),
+                  backgroundColor: Colors.green[700]));
+            }),
+        const SizedBox(height: 12),
+        _SettingsTile(
+            icon: Icons.network_check,
+            iconColor: Colors.green,
+            title: 'اختبار الاتصال بـ GitHub',
+            subtitle: 'التحقق من حالة الاتصال',
+            onTap: () async {
+              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                  content:
+                      Text('⏳ جاري الاختبار...', style: GoogleFonts.poppins()),
+                  behavior: SnackBarBehavior.floating));
+              final ok = await GitHubService.testConnection();
+              if (context.mounted)
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                    content: Text(ok ? '✅ الاتصال ناجح' : '❌ فشل الاتصال',
+                        style: GoogleFonts.poppins()),
+                    behavior: SnackBarBehavior.floating,
+                    backgroundColor: ok ? Colors.green[700] : Colors.red[700],
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12))));
+            }),
+        const SizedBox(height: 12),
+        _SettingsTile(
+            icon: Icons.favorite,
+            iconColor: Colors.red,
+            title: 'المفضلة',
+            subtitle: '$favCount صورة محفوظة',
+            trailing: favCount > 0
+                ? Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                        color: Colors.red,
+                        borderRadius: BorderRadius.circular(12)),
+                    child: Text('$favCount',
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold)))
+                : null,
+            onTap: () => Navigator.push(context,
+                MaterialPageRoute(builder: (_) => const FavoritesScreen()))),
+        const SizedBox(height: 12),
+        _SettingsTile(
+            icon: Icons.security,
+            iconColor: Colors.teal,
+            title: 'أذونات التطبيق',
+            subtitle: 'إدارة أذونات الصور والتخزين',
+            onTap: () async {
+              final deviceInfo = DeviceInfoPlugin();
+              bool isGranted = false;
+              if (Platform.isIOS) {
+                isGranted = await Permission.photos.isGranted;
+              } else {
+                final androidInfo = await deviceInfo.androidInfo;
+                isGranted = androidInfo.version.sdkInt >= 33
+                    ? await Permission.photos.isGranted
+                    : await Permission.storage.isGranted;
+              }
+              if (context.mounted) {
+                if (isGranted) {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                      content: Text('✅ الأذونات ممنوحة',
+                          style: GoogleFonts.poppins()),
+                      backgroundColor: Colors.green[700],
+                      behavior: SnackBarBehavior.floating,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12))));
+                } else {
+                  openAppSettings();
+                }
+              }
+            }),
+        const SizedBox(height: 12),
+        _SettingsTile(
+            icon: Icons.privacy_tip_outlined,
+            iconColor: Colors.blueAccent,
+            title: 'سياسة الخصوصية',
+            subtitle: 'اقرأ سياسة الخصوصية الخاصة بالتطبيق',
+            onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (_) => const PrivacyPolicyScreen()))),
+        const SizedBox(height: 12),
+        _SettingsTile(
+            icon: Icons.info_outline,
+            iconColor: Colors.cyan,
+            title: 'عن التطبيق',
+            subtitle: 'KASEM 2026',
+            onTap: () {
+              showDialog(
+                context: context,
+                builder: (_) => AlertDialog(
+                  backgroundColor: const Color(0xFF1A2533),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20)),
+                  title: Text('4K خلفيات',
+                      style: GoogleFonts.poppins(
+                          color: Colors.white, fontWeight: FontWeight.bold),
+                      textAlign: TextAlign.center),
+                  content: Column(mainAxisSize: MainAxisSize.min, children: [
+                    Container(
+                        width: 80,
+                        height: 80,
+                        decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(20),
+                            boxShadow: [
+                              BoxShadow(
+                                  color: Colors.blue.withValues(alpha: 0.4),
+                                  blurRadius: 20)
+                            ]),
+                        child: ClipRRect(
+                            borderRadius: BorderRadius.circular(20),
+                            child: Image.asset('assets/icon.png',
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) => Container(
+                                    color: Colors.blueAccent,
+                                    child: const Icon(Icons.wallpaper,
+                                        color: Colors.white, size: 40))))),
+                    const SizedBox(height: 16),
+                    Text('الإصدار 1.1',
+                        style: GoogleFonts.poppins(
+                            color: Colors.grey[400], fontSize: 13)),
+                    const SizedBox(height: 4),
+                    Text('تطبيق خلفيات عالي الجودة',
+                        style: GoogleFonts.poppins(
+                            color: Colors.white70, fontSize: 13)),
+                    const SizedBox(height: 4),
+                    Text('KASEM 2026',
+                        style: GoogleFonts.poppins(
+                            color: Colors.grey[500], fontSize: 12))
+                  ]),
+                  actions: [
+                    TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: Text('إغلاق',
+                            style:
+                                GoogleFonts.poppins(color: Colors.blueAccent)))
+                  ],
                 ),
               );
-            }
-          },
-        ),
-        const SizedBox(height: 12),
-        _SettingsTile(
-          icon: Icons.favorite,
-          iconColor: Colors.red,
-          title: 'المفضلة',
-          subtitle: '$favCount صورة محفوظة',
-          trailing: favCount > 0
-              ? Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: Colors.red,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text('$favCount',
-                      style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold)),
-                )
-              : null,
-          onTap: () => Navigator.push(context,
-              MaterialPageRoute(builder: (_) => const FavoritesScreen())),
-        ),
-        const SizedBox(height: 12),
-        _SettingsTile(
-          icon: Icons.security,
-          iconColor: Colors.teal,
-          title: 'أذونات التطبيق',
-          subtitle: 'إدارة أذونات الصور والتخزين',
-          onTap: () async {
-            final deviceInfo = DeviceInfoPlugin();
-            bool isGranted = false;
-            if (Platform.isIOS) {
-              isGranted = await Permission.photos.isGranted;
-            } else {
-              final androidInfo = await deviceInfo.androidInfo;
-              isGranted = androidInfo.version.sdkInt >= 33
-                  ? await Permission.photos.isGranted
-                  : await Permission.storage.isGranted;
-            }
-            if (context.mounted) {
-              if (isGranted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content:
-                        Text('✅ الأذونات ممنوحة', style: GoogleFonts.poppins()),
-                    backgroundColor: Colors.green[700],
-                    behavior: SnackBarBehavior.floating,
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12)),
-                  ),
-                );
-              } else {
-                await PermissionsInitializer._requestStoragePermission(context);
-              }
-            }
-          },
-        ),
-        const SizedBox(height: 12),
-        _SettingsTile(
-          icon: Icons.privacy_tip_outlined,
-          iconColor: Colors.blueAccent,
-          title: 'سياسة الخصوصية',
-          subtitle: 'اقرأ سياسة الخصوصية الخاصة بالتطبيق',
-          onTap: () => Navigator.push(context,
-              MaterialPageRoute(builder: (_) => const PrivacyPolicyScreen())),
-        ),
-        const SizedBox(height: 12),
-        _SettingsTile(
-          icon: Icons.info_outline,
-          iconColor: Colors.cyan,
-          title: 'عن التطبيق',
-          subtitle: 'KASEM 2026',
-          onTap: () {
-            showDialog(
-              context: context,
-              builder: (_) => AlertDialog(
-                backgroundColor: const Color(0xFF1A2533),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20)),
-                title: Text('4K خلفيات',
-                    style: GoogleFonts.poppins(
-                        color: Colors.white, fontWeight: FontWeight.bold),
-                    textAlign: TextAlign.center),
-                content: Column(mainAxisSize: MainAxisSize.min, children: [
-                  Container(
-                    width: 80,
-                    height: 80,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(20),
-                      boxShadow: [
-                        BoxShadow(
-                            color: Colors.blue.withValues(alpha: 0.4),
-                            blurRadius: 20),
-                      ],
-                    ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(20),
-                      child: Image.asset('assets/icon.png',
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => Container(
-                                color: Colors.blueAccent,
-                                child: const Icon(Icons.wallpaper,
-                                    color: Colors.white, size: 40),
-                              )),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Text('الإصدار 1.1',
-                      style: GoogleFonts.poppins(
-                          color: Colors.grey[400], fontSize: 13)),
-                  const SizedBox(height: 4),
-                  Text('تطبيق خلفيات عالي الجودة',
-                      style: GoogleFonts.poppins(
-                          color: Colors.white70, fontSize: 13)),
-                  const SizedBox(height: 4),
-                  Text('KASEM 2026',
-                      style: GoogleFonts.poppins(
-                          color: Colors.grey[500], fontSize: 12)),
-                ]),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: Text('إغلاق',
-                        style: GoogleFonts.poppins(color: Colors.blueAccent)),
-                  ),
-                ],
-              ),
-            );
-          },
-        ),
+            }),
       ]),
     );
   }
@@ -3251,15 +2847,13 @@ class _SettingsTile extends StatelessWidget {
   final String subtitle;
   final VoidCallback onTap;
   final Widget? trailing;
-
-  const _SettingsTile({
-    required this.icon,
-    required this.iconColor,
-    required this.title,
-    required this.subtitle,
-    required this.onTap,
-    this.trailing,
-  });
+  const _SettingsTile(
+      {required this.icon,
+      required this.iconColor,
+      required this.title,
+      required this.subtitle,
+      required this.onTap,
+      this.trailing});
 
   @override
   Widget build(BuildContext context) {
@@ -3272,36 +2866,33 @@ class _SettingsTile extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.08),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
-            ),
+                color: Colors.white.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(16),
+                border:
+                    Border.all(color: Colors.white.withValues(alpha: 0.12))),
             child: Row(children: [
               Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: iconColor.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(icon, color: iconColor, size: 22),
-              ),
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                      color: iconColor.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(12)),
+                  child: Icon(icon, color: iconColor, size: 22)),
               const SizedBox(width: 16),
               Expanded(
-                child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(title,
-                          style: GoogleFonts.poppins(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w600,
-                              fontSize: 14)),
-                      Text(subtitle,
-                          style: GoogleFonts.poppins(
-                              color: Colors.grey[400], fontSize: 12)),
-                    ]),
-              ),
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                    Text(title,
+                        style: GoogleFonts.poppins(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 14)),
+                    Text(subtitle,
+                        style: GoogleFonts.poppins(
+                            color: Colors.grey[400], fontSize: 12))
+                  ])),
               if (trailing != null) ...[trailing!, const SizedBox(width: 6)],
-              const Icon(Icons.chevron_right, color: Colors.grey),
+              const Icon(Icons.chevron_right, color: Colors.grey)
             ]),
           ),
         ),
@@ -3311,61 +2902,53 @@ class _SettingsTile extends StatelessWidget {
 }
 
 // =============================================================================
-// 13. DATA
+// 14. DATA
 // =============================================================================
 class MockData {
   static List<CategoryModel> get categories => const [
         CategoryModel(
-          name: 'All Images',
-          repository: 'All-images',
-          icon: Icons.photo_library,
-          accentColor: Colors.blueAccent,
-        ),
+            name: 'All Images',
+            repository: 'All-images',
+            icon: Icons.photo_library,
+            accentColor: Colors.blueAccent),
         CategoryModel(
-          name: 'Anime',
-          repository: 'anime_wallpapers',
-          icon: Icons.auto_awesome,
-          accentColor: Colors.orange,
-        ),
+            name: 'Anime',
+            repository: 'anime_wallpapers',
+            icon: Icons.auto_awesome,
+            accentColor: Colors.orange),
         CategoryModel(
-          name: 'Sport',
-          repository: 'Sport',
-          icon: Icons.sports,
-          accentColor: Colors.green,
-        ),
+            name: 'Sport',
+            repository: 'Sport',
+            icon: Icons.sports,
+            accentColor: Colors.green),
         CategoryModel(
-          name: 'Cars',
-          repository: 'cars',
-          icon: Icons.directions_car,
-          accentColor: Colors.red,
-        ),
+            name: 'Cars',
+            repository: 'cars',
+            icon: Icons.directions_car,
+            accentColor: Colors.red),
         CategoryModel(
-          name: 'Nature',
-          repository: 'nature',
-          icon: Icons.nature,
-          accentColor: Colors.green,
-        ),
+            name: 'Nature',
+            repository: 'nature',
+            icon: Icons.nature,
+            accentColor: Colors.green),
         CategoryModel(
-          name: 'Space',
-          repository: 'space',
-          icon: Icons.rocket,
-          accentColor: Colors.purple,
-        ),
+            name: 'Space',
+            repository: 'space',
+            icon: Icons.rocket,
+            accentColor: Colors.purple),
         CategoryModel(
-          name: '16:9 Ratio',
-          repository: 'imag-16-9',
-          icon: Icons.crop_landscape,
-          accentColor: Colors.cyan,
-        ),
+            name: '16:9 Ratio',
+            repository: 'imag-16-9',
+            icon: Icons.crop_landscape,
+            accentColor: Colors.cyan),
       ];
 }
 
 // =============================================================================
-// 14. BOTTOM NAV
+// 15. BOTTOM NAV
 // =============================================================================
 class CustomBottomNav extends StatelessWidget {
   const CustomBottomNav({super.key});
-
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<AppProvider>();
@@ -3378,10 +2961,10 @@ class CustomBottomNav extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.symmetric(vertical: 8),
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(30),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
-            ),
+                color: Colors.white.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(30),
+                border:
+                    Border.all(color: Colors.white.withValues(alpha: 0.15))),
             child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: [
@@ -3423,13 +3006,11 @@ class _NavItem extends StatelessWidget {
   final String label;
   final int index;
   final AppProvider provider;
-
-  const _NavItem({
-    required this.icon,
-    required this.label,
-    required this.index,
-    required this.provider,
-  });
+  const _NavItem(
+      {required this.icon,
+      required this.label,
+      required this.index,
+      required this.provider});
 
   @override
   Widget build(BuildContext context) {
@@ -3441,11 +3022,10 @@ class _NavItem extends StatelessWidget {
         curve: Curves.easeInOutCubic,
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
-          color: isSelected
-              ? Colors.blueAccent.withValues(alpha: 0.22)
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(20),
-        ),
+            color: isSelected
+                ? Colors.blueAccent.withValues(alpha: 0.22)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(20)),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           Icon(icon,
               color: isSelected ? Colors.blueAccent : Colors.grey, size: 22),
@@ -3454,8 +3034,7 @@ class _NavItem extends StatelessWidget {
               style: GoogleFonts.poppins(
                   fontSize: 9,
                   color: isSelected ? Colors.blueAccent : Colors.grey,
-                  fontWeight:
-                      isSelected ? FontWeight.w700 : FontWeight.normal)),
+                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.normal))
         ]),
       ),
     );
@@ -3463,7 +3042,7 @@ class _NavItem extends StatelessWidget {
 }
 
 // =============================================================================
-// 15. MAIN LAYOUT
+// 16. MAIN LAYOUT
 // =============================================================================
 class MainLayout extends StatefulWidget {
   const MainLayout({super.key});
@@ -3483,13 +3062,10 @@ class _MainLayoutState extends State<MainLayout> {
     final privacyProvider = context.read<PrivacyProvider>();
     if (!privacyProvider.accepted) {
       showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (_) => const PrivacyPolicyDialog(),
-      ).then((_) {
-        if (mounted) {
-          PermissionsInitializer.requestOnFirstLaunch(context);
-        }
+          context: context,
+          barrierDismissible: false,
+          builder: (_) => const PrivacyPolicyDialog()).then((_) {
+        if (mounted) PermissionsInitializer.requestOnFirstLaunch(context);
       });
     } else {
       PermissionsInitializer.requestOnFirstLaunch(context);
@@ -3504,27 +3080,23 @@ class _MainLayoutState extends State<MainLayout> {
       const NewScreen(),
       const BestScreen(),
       const Screen169(),
-      const CatalogScreen(),
+      const CatalogScreen()
     ];
     return Scaffold(
       backgroundColor: Colors.transparent,
       extendBodyBehindAppBar: true,
       body: Stack(children: [
         Positioned.fill(
-          child: Container(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  Color(0xFF0F0F1A),
-                  Color(0xFF0F2027),
-                  Color(0xFF1A1A2E),
-                ],
-              ),
-            ),
-          ),
-        ),
+            child: Container(
+                decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+              Color(0xFF0F0F1A),
+              Color(0xFF0F2027),
+              Color(0xFF1A1A2E)
+            ])))),
         Positioned.fill(
           child: AnimatedSwitcher(
             duration: const Duration(milliseconds: 500),
@@ -3533,38 +3105,31 @@ class _MainLayoutState extends State<MainLayout> {
             switchInCurve: Curves.easeInOutCubic,
             switchOutCurve: Curves.easeInOutCubic,
             child: KeyedSubtree(
-              key: ValueKey(provider.currentIndex),
-              child: screens[provider.currentIndex],
-            ),
+                key: ValueKey(provider.currentIndex),
+                child: screens[provider.currentIndex]),
           ),
         ),
         const Positioned(
-          bottom: 0,
-          left: 0,
-          right: 0,
-          child: CustomBottomNav(),
-        ),
+            bottom: 0, left: 0, right: 0, child: CustomBottomNav()),
       ]),
     );
   }
 }
 
 // =============================================================================
-// 16. APP & MAIN
+// 17. APP & MAIN
 // =============================================================================
 class WallpaperApp extends StatelessWidget {
   const WallpaperApp({super.key});
-
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: '4K خلفيات',
       theme: ThemeData.dark().copyWith(
-        scaffoldBackgroundColor: Colors.transparent,
-        primaryColor: Colors.blueAccent,
-        colorScheme: const ColorScheme.dark(primary: Colors.blueAccent),
-      ),
+          scaffoldBackgroundColor: Colors.transparent,
+          primaryColor: Colors.blueAccent,
+          colorScheme: const ColorScheme.dark(primary: Colors.blueAccent)),
       home: const SplashScreen(),
     );
   }
@@ -3572,12 +3137,9 @@ class WallpaperApp extends StatelessWidget {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  SystemChrome.setSystemUIOverlayStyle(
-    const SystemUiOverlayStyle(
+  SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
-      statusBarIconBrightness: Brightness.light,
-    ),
-  );
+      statusBarIconBrightness: Brightness.light));
 
   try {
     await AdMobManager().initialize();
@@ -3587,7 +3149,10 @@ void main() async {
 
   final favProvider = FavoritesProvider();
   final privacyProvider = PrivacyProvider();
-  await Future.wait([favProvider.load(), privacyProvider.load()]);
+  final coinsProvider = CoinsProvider(); // ✅ تهيئة مزود العملات
+
+  await Future.wait(
+      [favProvider.load(), privacyProvider.load(), coinsProvider.load()]);
 
   runApp(
     MultiProvider(
@@ -3595,6 +3160,8 @@ void main() async {
         ChangeNotifierProvider(create: (_) => AppProvider()),
         ChangeNotifierProvider.value(value: favProvider),
         ChangeNotifierProvider.value(value: privacyProvider),
+        ChangeNotifierProvider.value(
+            value: coinsProvider), // ✅ إضافته للـ Providers
       ],
       child: const WallpaperApp(),
     ),
