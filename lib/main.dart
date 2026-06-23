@@ -18,12 +18,15 @@ import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 
-// ✅ إضافة imports لـ Firebase
+// ✅ إضافة مكتبات Firebase للإشعارات
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
-// ✅ كود خدمة الإشعارات
+// =============================================================================
+// 🔔 NOTIFICATION SERVICE — خدمة الإشعارات
+// =============================================================================
+
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
@@ -40,13 +43,13 @@ class NotificationService {
       GlobalKey<NavigatorState>();
 
   static Future<void> initialize() async {
-    // معالجة رسائل الخلفية
+    // 1. معالجة رسائل الخلفية
     FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
-    // طلب الأذونات
+    // 2. طلب الأذونات
     await _requestPermissions();
 
-    // إعداد الإشعارات المحلية
+    // 3. إعداد الإشعارات المحلية (للظهور في المقدمة)
     const AndroidInitializationSettings androidSettings =
         AndroidInitializationSettings('@mipmap/ic_launcher');
     const DarwinInitializationSettings iosSettings =
@@ -57,7 +60,7 @@ class NotificationService {
     );
     await _localNotifications.initialize(initSettings);
 
-    // إنشاء قناة إشعارات
+    // إنشاء قناة إشعارات لأندرويد
     const AndroidNotificationChannel channel = AndroidNotificationChannel(
       'high_importance_channel',
       'High Importance Notifications',
@@ -69,7 +72,7 @@ class NotificationService {
             AndroidFlutterLocalNotificationsPlugin>()
         ?.createNotificationChannel(channel);
 
-    // ✅ الاستماع للإشعارات في المقدمة
+    // 4. الاستماع للإشعارات في المقدمة (Foreground)
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
       RemoteNotification? notification = message.notification;
       if (notification != null) {
@@ -91,10 +94,10 @@ class NotificationService {
       }
     });
 
-    // ✅ عند الضغط على الإشعار (والد التطبيق في الخلفية)
+    // 5. عند الضغط على الإشعار (والد التطبيق في الخلفية)
     FirebaseMessaging.onMessageOpenedApp.listen(_handleNotificationNavigation);
 
-    // ✅ التحقق إذا فتح التطبيق من خلال إشعار (والد التطبيق مغلق)
+    // 6. التحقق إذا فتح التطبيق من خلال إشعار (والد التطبيق مغلق)
     RemoteMessage? initialMessage = await _fcm.getInitialMessage();
     if (initialMessage != null) {
       _handleNotificationNavigation(initialMessage);
@@ -127,11 +130,24 @@ class NotificationService {
   }
 
   static Future<void> _requestPermissions() async {
-    NotificationSettings settings = await _fcm.requestPermission(
-      alert: true,
-      badge: true,
-      sound: true,
-    );
+    if (Platform.isIOS) {
+      // طلب أذونات iOS
+      await _fcm.requestPermission(
+        alert: true,
+        badge: true,
+        sound: true,
+        provisional: false,
+      );
+    } else {
+      await _fcm.requestPermission(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
+    }
+
+    // الاشتراك في topic
+    await _fcm.subscribeToTopic('all_users');
 
     String? token = await _fcm.getToken();
     print('🔥 FCM Token: $token');
@@ -691,12 +707,27 @@ class GitHubService {
 // =============================================================================
 class CoinsProvider with ChangeNotifier {
   int _coins = 0;
+  bool _hasReceivedWelcomeBonus = false;
+
   int get coins => _coins;
+  bool get hasReceivedWelcomeBonus => _hasReceivedWelcomeBonus;
 
   Future<void> load() async {
     final prefs = await SharedPreferences.getInstance();
     _coins = prefs.getInt('user_coins') ?? 0;
+    _hasReceivedWelcomeBonus = prefs.getBool('welcome_bonus_received') ?? false;
     notifyListeners();
+  }
+
+  // ✅ إضافة عملات ترحيبية عند أول فتح
+  Future<void> giveWelcomeBonus() async {
+    if (!_hasReceivedWelcomeBonus) {
+      _coins += 900; // 🎁 عدد العملات الترحيبية (يمكنك تغييره)
+      _hasReceivedWelcomeBonus = true;
+      await _save();
+      notifyListeners();
+      AppLogger.success('🎁 Welcome bonus: 50 coins added!');
+    }
   }
 
   Future<void> addCoins(int amount) async {
@@ -718,6 +749,7 @@ class CoinsProvider with ChangeNotifier {
   Future<void> _save() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt('user_coins', _coins);
+    await prefs.setBool('welcome_bonus_received', _hasReceivedWelcomeBonus);
   }
 }
 
@@ -3241,7 +3273,6 @@ class _MainLayoutState extends State<MainLayout> {
 // =============================================================================
 class WallpaperApp extends StatelessWidget {
   const WallpaperApp({super.key});
-
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -3262,7 +3293,7 @@ class WallpaperApp extends StatelessWidget {
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // ✅ تهيئة Firebase (ضروري جداً)
+  // ✅ 1. تهيئة Firebase (ضروري جداً)
   try {
     await Firebase.initializeApp();
     AppLogger.success('✅ Firebase initialized successfully');
@@ -3271,7 +3302,7 @@ void main() async {
     // استمر في تشغيل التطبيق حتى لو فشل Firebase
   }
 
-  // ✅ تهيئة الإشعارات
+  // ✅ 2. تهيئة الإشعارات
   try {
     await NotificationService.initialize();
     AppLogger.success('✅ Notification service initialized');
