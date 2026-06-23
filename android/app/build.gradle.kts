@@ -5,6 +5,9 @@ plugins {
     id("com.android.application")
     id("kotlin-android")
     id("dev.flutter.flutter-gradle-plugin")
+    
+    // ✅ أضف هذا السطر
+    id("com.google.gms.google-services")
 }
 
 // قراءة ملف key.properties بشكل صحيح في Kotlin DSL
@@ -20,6 +23,9 @@ android {
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
+        // ✅ تفعيل desugaring
+        isCoreLibraryDesugaringEnabled = true
+        
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
@@ -63,4 +69,9 @@ tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinJvmCompile>().configureEa
 
 flutter {
     source = "../.."
+}
+
+// ✅ أضف هذا القسم في نهاية الملف
+dependencies {
+    "coreLibraryDesugaring"("com.android.tools:desugar_jdk_libs:2.0.4")
 }

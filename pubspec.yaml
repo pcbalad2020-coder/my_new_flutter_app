@@ -10,19 +10,31 @@ version: 1.0.0+2
 dependencies:
   flutter:
     sdk: flutter
+  
+  # Firebase
+  firebase_core: ^3.8.1
+  firebase_messaging: ^15.1.6
+  flutter_local_notifications: ^18.0.1
 
+  # State Management & Ads
   provider: ^6.1.1
   google_mobile_ads: ^5.1.0
+
+  # Images & UI
   cached_network_image: ^3.3.1
   shimmer: ^3.0.0
   google_fonts: ^6.1.0
+
+  # Network
   http: ^1.1.2
   dio: ^5.4.0
+
+  # Local Data & Utilities
   path_provider: ^2.1.2
   shared_preferences: ^2.2.2
   permission_handler: ^11.2.0
   saver_gallery: ^3.0.6
-  share_plus: ^9.0.0
+  share_plus: 12.0.2
   device_info_plus: ^10.1.0
 
 dev_dependencies:

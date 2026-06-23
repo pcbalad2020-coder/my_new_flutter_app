@@ -18,6 +18,126 @@ import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 
+// ✅ إضافة imports لـ Firebase
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+
+// ✅ كود خدمة الإشعارات
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp();
+  print("Handling a background message: ${message.messageId}");
+}
+
+class NotificationService {
+  static final FirebaseMessaging _fcm = FirebaseMessaging.instance;
+  static final FlutterLocalNotificationsPlugin _localNotifications =
+      FlutterLocalNotificationsPlugin();
+
+  // ✅ إضافة GlobalKey للتنقل
+  static final GlobalKey<NavigatorState> navigatorKey =
+      GlobalKey<NavigatorState>();
+
+  static Future<void> initialize() async {
+    // معالجة رسائل الخلفية
+    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+
+    // طلب الأذونات
+    await _requestPermissions();
+
+    // إعداد الإشعارات المحلية
+    const AndroidInitializationSettings androidSettings =
+        AndroidInitializationSettings('@mipmap/ic_launcher');
+    const DarwinInitializationSettings iosSettings =
+        DarwinInitializationSettings();
+    const InitializationSettings initSettings = InitializationSettings(
+      android: androidSettings,
+      iOS: iosSettings,
+    );
+    await _localNotifications.initialize(initSettings);
+
+    // إنشاء قناة إشعارات
+    const AndroidNotificationChannel channel = AndroidNotificationChannel(
+      'high_importance_channel',
+      'High Importance Notifications',
+      description: 'This channel is used for important notifications.',
+      importance: Importance.high,
+    );
+    await _localNotifications
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>()
+        ?.createNotificationChannel(channel);
+
+    // ✅ الاستماع للإشعارات في المقدمة
+    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+      RemoteNotification? notification = message.notification;
+      if (notification != null) {
+        _localNotifications.show(
+          notification.hashCode,
+          notification.title,
+          notification.body,
+          NotificationDetails(
+            android: AndroidNotificationDetails(
+              channel.id,
+              channel.name,
+              channelDescription: channel.description,
+              icon: '@mipmap/ic_launcher',
+            ),
+            iOS: const DarwinNotificationDetails(),
+          ),
+          payload: jsonEncode(message.data), // ✅ إضافة البيانات
+        );
+      }
+    });
+
+    // ✅ عند الضغط على الإشعار (والد التطبيق في الخلفية)
+    FirebaseMessaging.onMessageOpenedApp.listen(_handleNotificationNavigation);
+
+    // ✅ التحقق إذا فتح التطبيق من خلال إشعار (والد التطبيق مغلق)
+    RemoteMessage? initialMessage = await _fcm.getInitialMessage();
+    if (initialMessage != null) {
+      _handleNotificationNavigation(initialMessage);
+    }
+  }
+
+  // ✅ دالة معالجة التنقل من الإشعار
+  static void _handleNotificationNavigation(RemoteMessage message) {
+    print('Message clicked! ${message.data}');
+
+    final data = message.data;
+
+    // الانتقال حسب نوع البيانات
+    if (data['action'] == 'open_category' && data['category'] != null) {
+      String category = data['category'];
+
+      // استخدام Navigator للانتقال
+      navigatorKey.currentState?.push(
+        MaterialPageRoute(
+          builder: (context) =>
+              CategoryWallpapersScreen(categoryName: category),
+        ),
+      );
+    } else if (data['action'] == 'open_wallpaper' &&
+        data['wallpaper_id'] != null) {
+      // يمكنك إضافة كود لفتح خلفية محددة
+      String wallpaperId = data['wallpaper_id'];
+      // ... كود الفتح
+    }
+  }
+
+  static Future<void> _requestPermissions() async {
+    NotificationSettings settings = await _fcm.requestPermission(
+      alert: true,
+      badge: true,
+      sound: true,
+    );
+
+    String? token = await _fcm.getToken();
+    print('🔥 FCM Token: $token');
+  }
+}
+
 // =============================================================================
 // 📝 App Logger — نظام الـ logging
 // =============================================================================
@@ -3121,11 +3241,14 @@ class _MainLayoutState extends State<MainLayout> {
 // =============================================================================
 class WallpaperApp extends StatelessWidget {
   const WallpaperApp({super.key});
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: '4K خلفيات',
+      // ✅ إضافة navigatorKey
+      navigatorKey: NotificationService.navigatorKey,
       theme: ThemeData.dark().copyWith(
           scaffoldBackgroundColor: Colors.transparent,
           primaryColor: Colors.blueAccent,
@@ -3135,8 +3258,16 @@ class WallpaperApp extends StatelessWidget {
   }
 }
 
+// ✅ دالة main() المحدثة مع Firebase والإشعارات
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // ✅ 1. تهيئة Firebase
+  await Firebase.initializeApp();
+
+  // ✅ 2. تهيئة خدمة الإشعارات
+  await NotificationService.initialize();
+
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
       statusBarIconBrightness: Brightness.light));
@@ -3149,7 +3280,7 @@ void main() async {
 
   final favProvider = FavoritesProvider();
   final privacyProvider = PrivacyProvider();
-  final coinsProvider = CoinsProvider(); // ✅ تهيئة مزود العملات
+  final coinsProvider = CoinsProvider();
 
   await Future.wait(
       [favProvider.load(), privacyProvider.load(), coinsProvider.load()]);
@@ -3160,8 +3291,7 @@ void main() async {
         ChangeNotifierProvider(create: (_) => AppProvider()),
         ChangeNotifierProvider.value(value: favProvider),
         ChangeNotifierProvider.value(value: privacyProvider),
-        ChangeNotifierProvider.value(
-            value: coinsProvider), // ✅ إضافته للـ Providers
+        ChangeNotifierProvider.value(value: coinsProvider),
       ],
       child: const WallpaperApp(),
     ),
