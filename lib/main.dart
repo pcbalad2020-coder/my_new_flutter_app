@@ -3262,11 +3262,22 @@ class WallpaperApp extends StatelessWidget {
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // ✅ 1. تهيئة Firebase
-  await Firebase.initializeApp();
+  // ✅ تهيئة Firebase (ضروري جداً)
+  try {
+    await Firebase.initializeApp();
+    AppLogger.success('✅ Firebase initialized successfully');
+  } catch (e) {
+    AppLogger.error('❌ Firebase initialization failed: $e');
+    // استمر في تشغيل التطبيق حتى لو فشل Firebase
+  }
 
-  // ✅ 2. تهيئة خدمة الإشعارات
-  await NotificationService.initialize();
+  // ✅ تهيئة الإشعارات
+  try {
+    await NotificationService.initialize();
+    AppLogger.success('✅ Notification service initialized');
+  } catch (e) {
+    AppLogger.error('❌ Notification service failed: $e');
+  }
 
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
