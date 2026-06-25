@@ -27,6 +27,10 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 // 🔔 NOTIFICATION SERVICE — خدمة الإشعارات
 // =============================================================================
 
+// =============================================================================
+// 🔔 NOTIFICATION SERVICE — النسخة المصححة لتعمل بشكل صحيح على iOS
+// =============================================================================
+
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
@@ -38,7 +42,6 @@ class NotificationService {
   static final FlutterLocalNotificationsPlugin _localNotifications =
       FlutterLocalNotificationsPlugin();
 
-  // ✅ إضافة GlobalKey للتنقل
   static final GlobalKey<NavigatorState> navigatorKey =
       GlobalKey<NavigatorState>();
 
@@ -46,21 +49,34 @@ class NotificationService {
     // 1. معالجة رسائل الخلفية
     FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
-    // 2. طلب الأذونات
-    await _requestPermissions();
-
-    // 3. إعداد الإشعارات المحلية (للظهور في المقدمة)
+    // ✅ التصحيح #1: هيّئ flutter_local_notifications أولاً قبل طلب أي إذن
     const AndroidInitializationSettings androidSettings =
-        AndroidInitializationSettings('@mipmap/ic_launcher');
+        AndroidInitializationSettings('@mipmap/launcher_icon');
+
+    // ✅ التصحيح #2: فعّل طلبات الإذن داخل DarwinInitializationSettings نفسها
+    // هذا يضمن أن iOS يسجّل نوايا الإشعار بشكل صحيح من البداية
     const DarwinInitializationSettings iosSettings =
-        DarwinInitializationSettings();
+        DarwinInitializationSettings(
+      requestAlertPermission: true,
+      requestBadgePermission: true,
+      requestSoundPermission: true,
+      // مهم: لا تطلب الإذن مرتين (مرة هنا ومرة عبر FCM) دون تنسيق،
+      // لذلك نتركها true هنا وتكون هي المصدر الأساسي لطلب الإذن.
+    );
+
     const InitializationSettings initSettings = InitializationSettings(
       android: androidSettings,
       iOS: iosSettings,
     );
-    await _localNotifications.initialize(initSettings);
 
-    // إنشاء قناة إشعارات لأندرويد
+    await _localNotifications.initialize(
+      initSettings,
+      // ✅ التصحيح #3: معالج الضغط على الإشعار المحلي (كان غائباً تماماً!)
+      // بدونه، الضغط على إشعار ظاهر في iOS بينما التطبيق بالمقدمة لن يفعل شيء
+      onDidReceiveNotificationResponse: _onLocalNotificationTap,
+    );
+
+    // قناة إشعارات أندرويد
     const AndroidNotificationChannel channel = AndroidNotificationChannel(
       'high_importance_channel',
       'High Importance Notifications',
@@ -72,9 +88,23 @@ class NotificationService {
             AndroidFlutterLocalNotificationsPlugin>()
         ?.createNotificationChannel(channel);
 
-    // 4. الاستماع للإشعارات في المقدمة (Foreground)
+    // ✅ التصحيح #4: طلب الإذن من FCM (الآن بعد تهيئة local notifications)
+    final granted = await _requestPermissions();
+    AppLogger.info('🔔 Notification permission granted: $granted');
+
+    // ✅ التصحيح #5: الأهم لـ iOS — بدون هذا السطر، iOS لا يعرض
+    // الإشعار الأصلي من FCM أثناء كون التطبيق بالمقدمة، ولا تصل
+    // onMessage في بعض الحالات بشكل موثوق
+    await _fcm.setForegroundNotificationPresentationOptions(
+      alert: true,
+      badge: true,
+      sound: true,
+    );
+
+    // الاستماع للإشعارات في المقدمة (Foreground)
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
       RemoteNotification? notification = message.notification;
+      AppLogger.info('📩 Foreground message received: ${message.messageId}');
       if (notification != null) {
         _localNotifications.show(
           notification.hashCode,
@@ -85,36 +115,67 @@ class NotificationService {
               channel.id,
               channel.name,
               channelDescription: channel.description,
-              icon: '@mipmap/ic_launcher',
+              icon: '@mipmap/launcher_icon',
             ),
-            iOS: const DarwinNotificationDetails(),
+            // ✅ التصحيح #6: تفصيل iOS كان فاضياً تماماً (const DarwinNotificationDetails())
+            // وهذا يعني عدم وجود presentAlert/presentSound بشكل صريح
+            iOS: const DarwinNotificationDetails(
+              presentAlert: true,
+              presentBadge: true,
+              presentSound: true,
+            ),
           ),
-          payload: jsonEncode(message.data), // ✅ إضافة البيانات
+          payload: jsonEncode(message.data),
         );
       }
     });
 
-    // 5. عند الضغط على الإشعار (والد التطبيق في الخلفية)
+    // عند الضغط على الإشعار (والتطبيق في الخلفية)
     FirebaseMessaging.onMessageOpenedApp.listen(_handleNotificationNavigation);
 
-    // 6. التحقق إذا فتح التطبيق من خلال إشعار (والد التطبيق مغلق)
+    // التحقق إذا فُتح التطبيق من خلال إشعار (والتطبيق مغلق تماماً)
     RemoteMessage? initialMessage = await _fcm.getInitialMessage();
     if (initialMessage != null) {
       _handleNotificationNavigation(initialMessage);
     }
+
+    // ✅ التصحيح #7: الاشتراك بالـ topic بعد التأكد من نجاح طلب الإذن فقط،
+    // وعدم حجب init() بانتظار التوكن (كان getToken() متزامناً بشكل يعطّل البدء)
+    if (granted) {
+      unawaited(_subscribeAndLogToken());
+    }
   }
 
-  // ✅ دالة معالجة التنقل من الإشعار
+  static Future<void> _subscribeAndLogToken() async {
+    try {
+      await _fcm.subscribeToTopic('all_users');
+      String? token = await _fcm.getToken();
+      AppLogger.success('🔥 FCM Token: $token');
+    } catch (e) {
+      AppLogger.error('❌ Failed to subscribe/get token: $e');
+    }
+  }
+
+  // ✅ التصحيح #8: معالج جديد لضغطات الإشعار المحلي (كان غائباً)
+  static void _onLocalNotificationTap(NotificationResponse response) {
+    if (response.payload == null) return;
+    try {
+      final data = jsonDecode(response.payload!) as Map<String, dynamic>;
+      _handleNotificationNavigation(RemoteMessage(
+          data: data.map(
+        (key, value) => MapEntry(key, value.toString()),
+      )));
+    } catch (e) {
+      AppLogger.error('❌ Failed to parse notification payload: $e');
+    }
+  }
+
   static void _handleNotificationNavigation(RemoteMessage message) {
     print('Message clicked! ${message.data}');
-
     final data = message.data;
 
-    // الانتقال حسب نوع البيانات
     if (data['action'] == 'open_category' && data['category'] != null) {
       String category = data['category'];
-
-      // استخدام Navigator للانتقال
       navigatorKey.currentState?.push(
         MaterialPageRoute(
           builder: (context) =>
@@ -123,34 +184,55 @@ class NotificationService {
       );
     } else if (data['action'] == 'open_wallpaper' &&
         data['wallpaper_id'] != null) {
-      // يمكنك إضافة كود لفتح خلفية محددة
       String wallpaperId = data['wallpaper_id'];
       // ... كود الفتح
     }
   }
 
-  static Future<void> _requestPermissions() async {
+  // ✅ التصحيح #9: ترجع bool الآن لمعرفة هل سُمح بالإذن فعلاً أم لا
+  static Future<bool> _requestPermissions() async {
+    // ✅ التصحيح #11: طلب صلاحية الإشعارات الصريحة على أندرويد 13+ (API 33+)
+    // بدون هذا، الإشعارات لا تظهر إطلاقاً على أندرويد 13 فما فوق
+    if (Platform.isAndroid) {
+      final status = await Permission.notification.request();
+      if (!status.isGranted) {
+        AppLogger.warning(
+            '⚠️ Android notification permission not granted: $status');
+      }
+    }
+
+    NotificationSettings settings;
     if (Platform.isIOS) {
-      // طلب أذونات iOS
-      await _fcm.requestPermission(
+      settings = await _fcm.requestPermission(
         alert: true,
         badge: true,
         sound: true,
         provisional: false,
+        // ✅ التصحيح #10: announcement و criticalAlert كانا غائبين
+        // (ليسا ضروريين لكن يحسنان من بعض السلوكيات على iOS 15+)
+        announcement: false,
+        carPlay: false,
+        criticalAlert: false,
       );
     } else {
-      await _fcm.requestPermission(
+      settings = await _fcm.requestPermission(
         alert: true,
         badge: true,
         sound: true,
       );
     }
 
-    // الاشتراك في topic
-    await _fcm.subscribeToTopic('all_users');
+    final granted =
+        settings.authorizationStatus == AuthorizationStatus.authorized ||
+            settings.authorizationStatus == AuthorizationStatus.provisional;
 
-    String? token = await _fcm.getToken();
-    print('🔥 FCM Token: $token');
+    if (!granted) {
+      AppLogger.warning(
+          '⚠️ User declined or has not accepted notification permissions: '
+          '${settings.authorizationStatus}');
+    }
+
+    return granted;
   }
 }
 
@@ -722,7 +804,7 @@ class CoinsProvider with ChangeNotifier {
   // ✅ إضافة عملات ترحيبية عند أول فتح
   Future<void> giveWelcomeBonus() async {
     if (!_hasReceivedWelcomeBonus) {
-      _coins += 900; // 🎁 عدد العملات الترحيبية (يمكنك تغييره)
+      _coins += 50; // 🎁 عدد العملات الترحيبية (يمكنك تغييره)
       _hasReceivedWelcomeBonus = true;
       await _save();
       notifyListeners();

@@ -1,20 +1,35 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
-    
+
     <uses-permission android:name="com.google.android.gms.permission.AD_ID"/>
 
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
-    
+
+    <!-- ✅ التصحيح الأساسي: بدون هذه الصلاحية، أي إشعار على Android 13+ (API 33+)
+         يُحجب بصمت من نظام التشغيل، حتى لو نجح Firebase في استقبال الرسالة فعلياً -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
     <application
         android:label="4K خلفيات"
         android:name="${applicationName}"
         android:icon="@mipmap/launcher_icon">
-        
+
         <meta-data
             android:name="com.google.android.gms.ads.APPLICATION_ID"
             android:value="ca-app-pub-4756404048214956~3873608460"/>
-            
+
+        <!-- ✅ إضافة مستحسنة: تحديد القناة الافتراضية لإشعارات Firebase
+             عندما يكون التطبيق مغلقاً تماماً (terminated)، يستخدم النظام هذه
+             القناة تلقائياً بدل القناة الافتراضية العامة لأندرويد -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="high_importance_channel" />
+
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@mipmap/launcher_icon" />
+
         <activity
             android:name=".MainActivity"
             android:exported="true"
