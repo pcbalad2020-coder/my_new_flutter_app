@@ -27,10 +27,6 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 // 🔔 NOTIFICATION SERVICE — خدمة الإشعارات
 // =============================================================================
 
-// =============================================================================
-// 🔔 NOTIFICATION SERVICE — النسخة المصححة لتعمل بشكل صحيح على iOS
-// =============================================================================
-
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
@@ -53,15 +49,15 @@ class NotificationService {
     const AndroidInitializationSettings androidSettings =
         AndroidInitializationSettings('@mipmap/launcher_icon');
 
-    // ✅ التصحيح #2: فعّل طلبات الإذن داخل DarwinInitializationSettings نفسها
-    // هذا يضمن أن iOS يسجّل نوايا الإشعار بشكل صحيح من البداية
+    // ✅ التصحيح #2: لم نعد نطلب الإذن تلقائياً هنا (requestAlertPermission:
+    // false وما شابه) — أصبح الطلب يحدث بشكل صريح وموحّد فقط داخل
+    // requestPermissionAndSubscribe()، لتفادي أي طلب إذن مكرر أو غير منسّق
+    // بين iOS المحلي و FCM.
     const DarwinInitializationSettings iosSettings =
         DarwinInitializationSettings(
-      requestAlertPermission: true,
-      requestBadgePermission: true,
-      requestSoundPermission: true,
-      // مهم: لا تطلب الإذن مرتين (مرة هنا ومرة عبر FCM) دون تنسيق،
-      // لذلك نتركها true هنا وتكون هي المصدر الأساسي لطلب الإذن.
+      requestAlertPermission: false,
+      requestBadgePermission: false,
+      requestSoundPermission: false,
     );
 
     const InitializationSettings initSettings = InitializationSettings(
@@ -87,10 +83,6 @@ class NotificationService {
         .resolvePlatformSpecificImplementation<
             AndroidFlutterLocalNotificationsPlugin>()
         ?.createNotificationChannel(channel);
-
-    // ✅ التصحيح #4: طلب الإذن من FCM (الآن بعد تهيئة local notifications)
-    final granted = await _requestPermissions();
-    AppLogger.info('🔔 Notification permission granted: $granted');
 
     // ✅ التصحيح #5: الأهم لـ iOS — بدون هذا السطر، iOS لا يعرض
     // الإشعار الأصلي من FCM أثناء كون التطبيق بالمقدمة، ولا تصل
@@ -138,9 +130,27 @@ class NotificationService {
     if (initialMessage != null) {
       _handleNotificationNavigation(initialMessage);
     }
+  }
 
-    // ✅ التصحيح #7: الاشتراك بالـ topic بعد التأكد من نجاح طلب الإذن فقط،
-    // وعدم حجب init() بانتظار التوكن (كان getToken() متزامناً بشكل يعطّل البدء)
+  // ✅ جديد: يُستدعى بعد انتهاء تدفق الترحيب (سياسة الخصوصية + إذن الصور)
+  // بدل استدعائه فوراً عند بدء التطبيق. يضمن عدم ظهور نافذتي إذن نظام
+  // متتاليتين، ويتحقق أولاً إن كان قد طُلب من قبل لتجنّب الطلب المكرر في كل
+  // مرة يُفتح التطبيق.
+  static Future<void> requestPermissionAndSubscribe() async {
+    final prefs = await SharedPreferences.getInstance();
+    final alreadyAsked =
+        prefs.getBool('notification_permission_asked') ?? false;
+    if (alreadyAsked) {
+      // لا نعيد طلب الإذن من النظام في كل تشغيل، فقط نتحقق ونشترك إن سُمح.
+      final status = await Permission.notification.status;
+      if (status.isGranted) unawaited(_subscribeAndLogToken());
+      return;
+    }
+
+    final granted = await _requestPermissions();
+    AppLogger.info('🔔 Notification permission granted: $granted');
+    await prefs.setBool('notification_permission_asked', true);
+
     if (granted) {
       unawaited(_subscribeAndLogToken());
     }
@@ -244,6 +254,90 @@ class AppLogger {
   static void success(String msg) => debugPrint('✅ $msg');
   static void warning(String msg) => debugPrint('⚠️  $msg');
   static void error(String msg) => debugPrint('❌ $msg');
+}
+
+// =============================================================================
+// 🔐 GALLERY PERMISSION HELPER — منطق موحّد لإذن حفظ الصور
+// =============================================================================
+// ✅ إصلاح جوهري: تمت إزالة Permission.manageExternalStorage بالكامل.
+//
+// لماذا كان هذا خاطئاً:
+// 1) هذا إذن "الوصول لكل الملفات" (All Files Access) ولا يظهر كنافذة نظام
+//    عادية، بل يفتح شاشة إعدادات خاصة — وهذا يفسّر تذبذب السلوك بين الأجهزة
+//    ("ما تعمل على بعض الأجهزة")، لأن بعض الأجهزة/الإصدارات تتعامل معه
+//    بشكل مختلف ولا يعطي نتيجة "granted" مباشرة كباقي الأذونات العادية.
+// 2) Google Play يرفض التطبيقات التي تطلب هذا الإذن دون مبرر مشروع (مدير
+//    ملفات / تطبيق نسخ احتياطي / مضاد فيروسات). تطبيق خلفيات لا يستوفي هذا
+//    الشرط، وطلبه سيؤدي تقريباً لرفض التطبيق أثناء المراجعة.
+// 3) الأهم: حفظ الصور يتم عبر SaverGallery الذي يستخدم MediaStore API
+//    (التخزين المحدود/Scoped Storage). ابتداءً من Android 10 (API 29) لا
+//    يحتاج التطبيق أي إذن لإضافة ملف جديد ينشئه هو نفسه إلى المعرض. لذلك:
+//      • API 33+  → نطلب READ_MEDIA_IMAGES (Permission.photos) فقط
+//      • API 29-32 → لا حاجة لأي إذن إطلاقاً للحفظ
+//      • أقل من 29 → نطلب WRITE_EXTERNAL_STORAGE (Permission.storage)
+//
+// هذا المنطق موحّد هنا ويُستخدم من DownloadService و PermissionsInitializer
+// معاً، بدل وجود نسختين مختلفتين قد تتعارضا.
+class GalleryPermission {
+  /// يتحقق هل التطبيق يملك الإذن المطلوب فعلياً لحفظ صورة جديدة في المعرض.
+  /// يرجع true إذا كان الإذن "ممنوح" أو إذا لم يكن مطلوباً أصلاً لهذا
+  /// الإصدار من النظام (Scoped Storage).
+  static Future<bool> isGranted() async {
+    if (Platform.isIOS) {
+      final status = await Permission.photos.status;
+      return status.isGranted || status.isLimited;
+    }
+    final sdkInt = await _androidSdkInt();
+    if (sdkInt >= 33) {
+      return (await Permission.photos.status).isGranted;
+    }
+    if (sdkInt >= 29) {
+      // Scoped Storage: لا حاجة لإذن لحفظ ملف جديد ينشئه التطبيق.
+      return true;
+    }
+    return (await Permission.storage.status).isGranted;
+  }
+
+  /// يطلب الإذن إذا كان مطلوباً، ويرجع true عند النجاح (أو عدم الحاجة لإذن).
+  static Future<bool> request() async {
+    if (Platform.isIOS) {
+      final status = await Permission.photos.request();
+      return status.isGranted || status.isLimited;
+    }
+    final sdkInt = await _androidSdkInt();
+    if (sdkInt >= 33) {
+      final status = await Permission.photos.request();
+      return status.isGranted;
+    }
+    if (sdkInt >= 29) {
+      // Scoped Storage: لا حاجة لإذن — النظام يسمح للتطبيق بحفظ ملفاته
+      // الخاصة في المعرض عبر MediaStore بدون أي إذن وقت التشغيل.
+      return true;
+    }
+    final status = await Permission.storage.request();
+    return status.isGranted;
+  }
+
+  /// يرجع true إذا تم رفض الإذن نهائياً ("Don't ask again") ويحتاج فتح
+  /// إعدادات التطبيق يدوياً، بدل إعادة محاولة طلب الإذن من النظام (لأن
+  /// النظام لن يُظهر نافذة طلب إذن أخرى في هذه الحالة).
+  static Future<bool> isPermanentlyDenied() async {
+    if (Platform.isIOS) {
+      return (await Permission.photos.status).isPermanentlyDenied;
+    }
+    final sdkInt = await _androidSdkInt();
+    if (sdkInt >= 33) {
+      return (await Permission.photos.status).isPermanentlyDenied;
+    }
+    if (sdkInt >= 29) return false; // لا إذن مطلوب أصلاً
+    return (await Permission.storage.status).isPermanentlyDenied;
+  }
+
+  static Future<int> _androidSdkInt() async {
+    final deviceInfo = DeviceInfoPlugin();
+    final androidInfo = await deviceInfo.androidInfo;
+    return androidInfo.version.sdkInt;
+  }
 }
 
 // =============================================================================
@@ -893,26 +987,15 @@ class DownloadService {
     }
   }
 
+  // ✅ إصلاح: الآن تستخدم منطق GalleryPermission الموحّد بدل التحقق اليدوي
+  // المكرر والمختلف عن النسخة الموجودة في PermissionsInitializer، ودون
+  // استخدام Permission.manageExternalStorage الخاطئ.
   static Future<bool> _requestStoragePermission(BuildContext context) async {
-    if (Platform.isIOS) {
-      final status = await Permission.photos.request();
-      if (status.isGranted || status.isLimited) return true;
-      if (status.isPermanentlyDenied && context.mounted) openAppSettings();
-      return false;
+    final granted = await GalleryPermission.request();
+    if (granted) return true;
+    if (await GalleryPermission.isPermanentlyDenied() && context.mounted) {
+      openAppSettings();
     }
-    final deviceInfo = DeviceInfoPlugin();
-    final androidInfo = await deviceInfo.androidInfo;
-    final sdkInt = androidInfo.version.sdkInt;
-    PermissionStatus status;
-    if (sdkInt >= 33) {
-      status = await Permission.photos.request();
-    } else if (sdkInt >= 30) {
-      status = await Permission.manageExternalStorage.request();
-    } else {
-      status = await Permission.storage.request();
-    }
-    if (status.isGranted) return true;
-    if (status.isPermanentlyDenied && context.mounted) openAppSettings();
     return false;
   }
 }
@@ -1142,7 +1225,7 @@ class PermissionsInitializer {
     int attempts = 0;
     const int maxAttempts = 3;
     while (attempts < maxAttempts) {
-      final granted = await _checkAndRequest();
+      final granted = await GalleryPermission.request();
       if (granted) {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setBool('permissions_granted', true);
@@ -1150,6 +1233,16 @@ class PermissionsInitializer {
       }
       attempts++;
       if (!context.mounted) return;
+
+      // ✅ إصلاح: إذا رفض المستخدم نهائياً ("Don't ask again")، فالنظام لن
+      // يُظهر نافذة طلب إذن أخرى بعد الآن. عرض نافذة "إعادة المحاولة" في
+      // هذه الحالة كان بلا فائدة (تضغط "السماح" ولا يحدث شيء). الحل الصحيح
+      // هو توجيه المستخدم مباشرة لإعدادات التطبيق.
+      if (await GalleryPermission.isPermanentlyDenied()) {
+        openAppSettings();
+        return;
+      }
+
       if (attempts >= maxAttempts) {
         openAppSettings();
         return;
@@ -1226,23 +1319,6 @@ class PermissionsInitializer {
       );
       if (retry != true) return;
     }
-  }
-
-  static Future<bool> _checkAndRequest() async {
-    if (Platform.isIOS) {
-      final status = await Permission.photos.request();
-      return status.isGranted || status.isLimited;
-    }
-    final deviceInfo = DeviceInfoPlugin();
-    final androidInfo = await deviceInfo.androidInfo;
-    final sdkInt = androidInfo.version.sdkInt;
-    PermissionStatus status;
-    if (sdkInt >= 33) {
-      status = await Permission.photos.request();
-    } else {
-      status = await Permission.storage.request();
-    }
-    return status.isGranted;
   }
 }
 
@@ -1323,7 +1399,79 @@ const String kPrivacyPolicyText = '''
 سياسة الخصوصية – 4K خلفيات
 Privacy Policy – 4K Wallpapers
 آخر تحديث / Last Updated: مايو 2026
-... (نفس النص السابق)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[AR] 1. المعلومات التي يتم جمعها
+نحن لا نطلب إنشاء حساب داخل التطبيق ولا نقوم بجمع أو تخزين أي معلومات شخصية تحدد هويتك (مثل الاسم أو البريد الإلكتروني). قد تقوم بعض خدمات الطرف الثالث المستخدمة بجمع بيانات تقنية بشكل تلقائي لتحسين الأداء وعرض الإعلانات، وتشمل: نوع الجهاز، نظام التشغيل، عنوان IP، ومعرّفات الإعلانات.
+
+[EN] 1. Information We Collect
+We do not require account creation and we do not collect or store personal information (such as names or emails). Third-party services may automatically collect technical data to improve performance and display ads, including: device type, operating system, IP address, and advertising identifiers.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[AR] 2. الإعلانات
+يستخدم التطبيق خدمة Google AdMob لعرض الإعلانات. قد تستخدم Google وشركاؤها معرّفات الإعلانات لتقديم إعلانات مخصصة تهم المستخدم بناءً على اهتماماته.
+
+[EN] 2. Advertising
+The application uses Google AdMob to display advertisements. Google and its partners may use advertising identifiers to provide personalized ads based on your interests.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[AR] 3. أذونات التطبيق
+يتطلب التطبيق الوصول إلى بعض الأذونات الأساسية ليعمل بشكل صحيح:
+- إذن الإنترنت: لتحميل الصور المتجددة وعرض الإعلانات.
+- إذن التخزين أو الصور: لحفظ وتحميل الخلفيات مباشرة داخل جهازك. نحن لا نصل إلى صورك الخاصة ولا نقوم بجمعها أو مشاركتها أبداً.
+
+[EN] 3. App Permissions
+The app requires the following essential permissions to function properly:
+- Internet Permission: To load online wallpapers and display ads.
+- Storage/Photos Permission: To allow saving and downloading wallpapers onto your device. We never access, collect, or share your personal photos.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[AR] 4. خدمات الطرف الثالث
+يستخدم التطبيق خدمات تابعة لشركة Google تساعد في استقرار التطبيق وتحسين تجربة الاستخدام، وهي:
+Google Play Services, Google AdMob, Firebase Analytics, Firebase Crashlytics.
+
+[EN] 4. Third-Party Services
+The app utilizes Google services to improve stability, user experience, and performance:
+Google Play Services, Google AdMob, Firebase Analytics, Firebase Crashlytics.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[AR] 5. أمان البيانات
+نحن نسعى لحماية بياناتك التقنية باستخدام وسائل أمان مناسبة، ولكن يرجى العلم أنه لا يمكن ضمان الحماية الكاملة بنسبة 100% لأي خدمة عبر الإنترنت.
+
+[EN] 5. Data Security
+We strive to protect your technical data using appropriate security measures, but no internet-based service can be guaranteed to be 100% secure.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[AR] 6. خصوصية الأطفال
+هذا التطبيق غير موجه للأطفال دون سن 13 عاماً، ونحن لا نجمع أي بيانات تخصهم بشكل متعمد.
+
+[EN] 6. Children’s Privacy
+This application is not intended for or directed at children under the age of 13.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[AR] 7. التعديلات على السياسة
+قد نقوم بتحديث سياسة الخصوصية هذه من وقت لآخر لمواكبة أي تغييرات في التطبيق أو القوانين، وسيتم نشر أي تحديث مباشرة داخل هذه الصفحة.
+
+[EN] 7. Changes to This Privacy Policy
+We may update our Privacy Policy from time to time. Any changes will be updated and posted directly on this page.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[AR] 8. التواصل معنا
+إذا كان لديك أي استفسار أو سؤال بخصوص سياسة الخصوصية، يمكنك التواصل معنا عبر صفحة التطبيق الرسمية على متجر Google Play أو عبر بريد الدعم الفني الموضح في صفحة المتجر.
+
+[EN] 8. Contact Us
+If you have any questions regarding this Privacy Policy, please contact us through our official Google Play Store page or via the support email listed on the store.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+© 2026 4K Wallpapers - All Rights Reserved
 ''';
 
 // =============================================================================
@@ -2976,16 +3124,7 @@ class SettingsScreen extends StatelessWidget {
             title: 'أذونات التطبيق',
             subtitle: 'إدارة أذونات الصور والتخزين',
             onTap: () async {
-              final deviceInfo = DeviceInfoPlugin();
-              bool isGranted = false;
-              if (Platform.isIOS) {
-                isGranted = await Permission.photos.isGranted;
-              } else {
-                final androidInfo = await deviceInfo.androidInfo;
-                isGranted = androidInfo.version.sdkInt >= 33
-                    ? await Permission.photos.isGranted
-                    : await Permission.storage.isGranted;
-              }
+              final isGranted = await GalleryPermission.isGranted();
               if (context.mounted) {
                 if (isGranted) {
                   ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -3292,17 +3431,29 @@ class _MainLayoutState extends State<MainLayout> {
         .addPostFrameCallback((_) => _checkPrivacyThenPermissions());
   }
 
+  // ✅ إصلاح "يطلب الإذن مرتين": الآن نتبع تسلسلاً واحداً واضحاً:
+  // 1) سياسة الخصوصية (إن لم تُقبل بعد)
+  // 2) إذن الصور/المعرض (مطلوب فعلياً لحفظ الخلفيات)
+  // 3) إذن الإشعارات (بعد انتهاء الخطوتين أعلاه، بفاصل واضح للمستخدم)
+  // بدل أن يطلب main() إذن الإشعارات فوراً عند الإقلاع بينما تُطلب أذونات
+  // الصور بعد ذلك بثوانٍ — وهو ما كان يبدو للمستخدم كطلب مكرر.
   void _checkPrivacyThenPermissions() {
     final privacyProvider = context.read<PrivacyProvider>();
     if (!privacyProvider.accepted) {
       showDialog(
           context: context,
           barrierDismissible: false,
-          builder: (_) => const PrivacyPolicyDialog()).then((_) {
-        if (mounted) PermissionsInitializer.requestOnFirstLaunch(context);
+          builder: (_) => const PrivacyPolicyDialog()).then((_) async {
+        if (!mounted) return;
+        await PermissionsInitializer.requestOnFirstLaunch(context);
+        if (!mounted) return;
+        await NotificationService.requestPermissionAndSubscribe();
       });
     } else {
-      PermissionsInitializer.requestOnFirstLaunch(context);
+      PermissionsInitializer.requestOnFirstLaunch(context).then((_) async {
+        if (!mounted) return;
+        await NotificationService.requestPermissionAndSubscribe();
+      });
     }
   }
 
@@ -3384,7 +3535,6 @@ void main() async {
     // استمر في تشغيل التطبيق حتى لو فشل Firebase
   }
 
-  // ✅ 2. تهيئة الإشعارات
   try {
     await NotificationService.initialize();
     AppLogger.success('✅ Notification service initialized');
@@ -3408,6 +3558,7 @@ void main() async {
 
   await Future.wait(
       [favProvider.load(), privacyProvider.load(), coinsProvider.load()]);
+  await coinsProvider.giveWelcomeBonus();
 
   runApp(
     MultiProvider(
