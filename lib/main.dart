@@ -41,6 +41,14 @@ class NotificationService {
   static final GlobalKey<NavigatorState> navigatorKey =
       GlobalKey<NavigatorState>();
 
+  // ✅ إصلاح "يطلب الإذن مرتين": initialize() الآن يهيّئ كل شيء (القنوات،
+  // المستمعين، إلخ) لكنه لا يطلب إذن الإشعارات من النظام مباشرة عند بدء
+  // التطبيق. السبب: كانت هذه النافذة تظهر فوراً عند الإقلاع، وبعدها بثوانٍ
+  // تظهر نافذة إذن الصور بعد الموافقة على سياسة الخصوصية — نافذتا نظام
+  // متتاليتان تُحسّان للمستخدم وكأنه "نفس الطلب يتكرر". الحل: نفصل طلب إذن
+  // الإشعارات إلى requestPermissionAndSubscribe() ونستدعيها بعد انتهاء تدفق
+  // الترحيب (بعد قبول سياسة الخصوصية وطلب إذن الصور)، بحيث تظهر نافذتا
+  // النظام بفاصل واضح ومنطقي للمستخدم بدل أن تتلاحقا.
   static Future<void> initialize() async {
     // 1. معالجة رسائل الخلفية
     FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
@@ -385,9 +393,21 @@ class AdMobManager {
   DateTime? _appOpenLoadTime;
   int _viewCount = 0;
   static const int _interstitialInterval = 5;
+  // ✅ إصلاح: عداد عرض الخلفيات كان متغيراً في الذاكرة فقط، يُصفَّر لـ 0
+  // عند كل إعادة فتح للتطبيق. هذا يعني أن مستخدماً يعيد فتح التطبيق
+  // كثيراً قد يشاهد إعلانات بينية أكثر من المقصود (كل 5 خلفيات "من جديد"
+  // كل مرة بدل احتساب تراكمي). الآن نُحفظ العداد في SharedPreferences
+  // ونحمّله عند initialize() بحيث يستمر التتابع بين الجلسات.
+  static const String _viewCountKey = 'admob_wallpaper_view_count';
 
   Future<void> initialize() async {
     await MobileAds.instance.initialize();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      _viewCount = prefs.getInt(_viewCountKey) ?? 0;
+    } catch (e) {
+      AppLogger.error('Failed to load persisted ad view count: $e');
+    }
     _loadInterstitialAd();
     _loadRewardedAd();
     _loadAppOpenAd();
@@ -453,10 +473,20 @@ class AdMobManager {
 
   void trackWallpaperView({VoidCallback? onAdComplete}) {
     _viewCount++;
+    unawaited(_persistViewCount());
     if (_viewCount % _interstitialInterval == 0) {
       showInterstitialAd(onComplete: onAdComplete);
     } else {
       onAdComplete?.call();
+    }
+  }
+
+  Future<void> _persistViewCount() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt(_viewCountKey, _viewCount);
+    } catch (e) {
+      AppLogger.error('Failed to persist ad view count: $e');
     }
   }
 
@@ -524,9 +554,14 @@ class AdMobManager {
     return false;
   }
 
-  void showAppOpenAd() {
+  // ✅ إصلاح توقيت إعلان App Open: الآن تقبل الدالة onComplete اختياري —
+  // يُستدعى فقط بعد عرض/رفض/فشل الإعلان، حتى يستطيع المتصل (شاشة الـ
+  // Splash) الانتظار قبل الانتقال للمحتوى الحقيقي، بدل استدعاء الانتقال
+  // بالتوازي مع طلب عرض الإعلان كما كان سابقاً.
+  void showAppOpenAd({VoidCallback? onComplete}) {
     if (!_isAppOpenAdAvailable || _isShowingAd) {
       _loadAppOpenAd();
+      onComplete?.call();
       return;
     }
     _appOpenAd!.fullScreenContentCallback = FullScreenContentCallback(
@@ -536,12 +571,14 @@ class AdMobManager {
         ad.dispose();
         _appOpenAd = null;
         _loadAppOpenAd();
+        onComplete?.call();
       },
       onAdFailedToShowFullScreenContent: (ad, error) {
         _isShowingAd = false;
         ad.dispose();
         _appOpenAd = null;
         _loadAppOpenAd();
+        onComplete?.call();
       },
     );
     _appOpenAd!.show();
@@ -1400,7 +1437,7 @@ const String kPrivacyPolicyText = '''
 Privacy Policy – 4K Wallpapers
 آخر تحديث / Last Updated: مايو 2026
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 [AR] 1. المعلومات التي يتم جمعها
 نحن لا نطلب إنشاء حساب داخل التطبيق ولا نقوم بجمع أو تخزين أي معلومات شخصية تحدد هويتك (مثل الاسم أو البريد الإلكتروني). قد تقوم بعض خدمات الطرف الثالث المستخدمة بجمع بيانات تقنية بشكل تلقائي لتحسين الأداء وعرض الإعلانات، وتشمل: نوع الجهاز، نظام التشغيل، عنوان IP، ومعرّفات الإعلانات.
@@ -1408,7 +1445,7 @@ Privacy Policy – 4K Wallpapers
 [EN] 1. Information We Collect
 We do not require account creation and we do not collect or store personal information (such as names or emails). Third-party services may automatically collect technical data to improve performance and display ads, including: device type, operating system, IP address, and advertising identifiers.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 [AR] 2. الإعلانات
 يستخدم التطبيق خدمة Google AdMob لعرض الإعلانات. قد تستخدم Google وشركاؤها معرّفات الإعلانات لتقديم إعلانات مخصصة تهم المستخدم بناءً على اهتماماته.
@@ -1416,7 +1453,7 @@ We do not require account creation and we do not collect or store personal infor
 [EN] 2. Advertising
 The application uses Google AdMob to display advertisements. Google and its partners may use advertising identifiers to provide personalized ads based on your interests.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 [AR] 3. أذونات التطبيق
 يتطلب التطبيق الوصول إلى بعض الأذونات الأساسية ليعمل بشكل صحيح:
@@ -1428,7 +1465,7 @@ The app requires the following essential permissions to function properly:
 - Internet Permission: To load online wallpapers and display ads.
 - Storage/Photos Permission: To allow saving and downloading wallpapers onto your device. We never access, collect, or share your personal photos.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 [AR] 4. خدمات الطرف الثالث
 يستخدم التطبيق خدمات تابعة لشركة Google تساعد في استقرار التطبيق وتحسين تجربة الاستخدام، وهي:
@@ -1438,7 +1475,7 @@ Google Play Services, Google AdMob, Firebase Analytics, Firebase Crashlytics.
 The app utilizes Google services to improve stability, user experience, and performance:
 Google Play Services, Google AdMob, Firebase Analytics, Firebase Crashlytics.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 [AR] 5. أمان البيانات
 نحن نسعى لحماية بياناتك التقنية باستخدام وسائل أمان مناسبة، ولكن يرجى العلم أنه لا يمكن ضمان الحماية الكاملة بنسبة 100% لأي خدمة عبر الإنترنت.
@@ -1446,7 +1483,7 @@ Google Play Services, Google AdMob, Firebase Analytics, Firebase Crashlytics.
 [EN] 5. Data Security
 We strive to protect your technical data using appropriate security measures, but no internet-based service can be guaranteed to be 100% secure.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 [AR] 6. خصوصية الأطفال
 هذا التطبيق غير موجه للأطفال دون سن 13 عاماً، ونحن لا نجمع أي بيانات تخصهم بشكل متعمد.
@@ -1454,7 +1491,7 @@ We strive to protect your technical data using appropriate security measures, bu
 [EN] 6. Children’s Privacy
 This application is not intended for or directed at children under the age of 13.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 [AR] 7. التعديلات على السياسة
 قد نقوم بتحديث سياسة الخصوصية هذه من وقت لآخر لمواكبة أي تغييرات في التطبيق أو القوانين، وسيتم نشر أي تحديث مباشرة داخل هذه الصفحة.
@@ -1462,7 +1499,7 @@ This application is not intended for or directed at children under the age of 13
 [EN] 7. Changes to This Privacy Policy
 We may update our Privacy Policy from time to time. Any changes will be updated and posted directly on this page.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 [AR] 8. التواصل معنا
 إذا كان لديك أي استفسار أو سؤال بخصوص سياسة الخصوصية، يمكنك التواصل معنا عبر صفحة التطبيق الرسمية على متجر Google Play أو عبر بريد الدعم الفني الموضح في صفحة المتجر.
@@ -1470,7 +1507,7 @@ We may update our Privacy Policy from time to time. Any changes will be updated 
 [EN] 8. Contact Us
 If you have any questions regarding this Privacy Policy, please contact us through our official Google Play Store page or via the support email listed on the store.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 © 2026 4K Wallpapers - All Rights Reserved
 ''';
 
@@ -1934,14 +1971,40 @@ class _SplashScreenState extends State<SplashScreen>
         curve: const Interval(0.5, 1.0, curve: Curves.easeIn)));
     _controller.forward();
 
-    Future.delayed(const Duration(milliseconds: 3000), () {
-      if (mounted) {
-        AdMobManager().showAppOpenAd();
+    // ✅ إصلاح توقيت إعلان App Open ليطابق توصية Google الرسمية: "يجب أن
+    // يظهر الإعلان فوق شاشة التحميل، وتبقى شاشة التحميل ظاهرة تحته" — لا
+    // أن يظهر بعد انتهائها بالتوازي مع الانتقال للمحتوى الحقيقي (وهو النمط
+    // الذي تُحذّر منه إرشادات AdMob لأنه قد يُصنَّف كاستخدام غير ملائم).
+    //
+    // التغيير: نطلب عرض الإعلان مباشرة عند تركيب الشاشة (بينما شاشة
+    // الـ Splash المتحركة لا تزال ظاهرة بالكامل خلفه)، وننتقل لـ MainLayout
+    // فقط بعد توفر الشرطين معاً: (1) انتهاء/رفض الإعلان أو تأكدنا أنه غير
+    // متاح، و(2) انقضاء المدة الدنيا لعرض شاشة الـ Splash — أيهما يكتمل
+    // أخيراً هو من يُطلق الانتقال، مع حارس يمنع تكرار الانتقال مرتين.
+    bool adFinished = false;
+    bool splashTimeElapsed = false;
+    bool navigated = false;
+
+    void maybeNavigate() {
+      if (navigated) return;
+      if (adFinished && splashTimeElapsed) {
+        navigated = true;
+        if (!mounted) return;
         Navigator.of(context).pushReplacement(PageRouteBuilder(
             pageBuilder: (_, anim, __) =>
                 FadeTransition(opacity: anim, child: const MainLayout()),
             transitionDuration: const Duration(milliseconds: 600)));
       }
+    }
+
+    AdMobManager().showAppOpenAd(onComplete: () {
+      adFinished = true;
+      maybeNavigate();
+    });
+
+    Future.delayed(const Duration(milliseconds: 3000), () {
+      splashTimeElapsed = true;
+      maybeNavigate();
     });
   }
 
@@ -2616,6 +2679,11 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
+  // ✅ إصلاح سياسة AdMob: يجب أن يكون الإعلان قابلاً للتمييز بوضوح عن
+  // المحتوى الحقيقي. كانت هذه البطاقة مصممة بنفس شكل بطاقات الخلفيات
+  // تماماً (نفس الزوايا، نفس الحجم) بدون أي تسمية — وهذا يخالف سياسة
+  // AdMob الخاصة بوضوح تمييز الإعلانات. أضفنا شارة "إعلان" واضحة في
+  // الزاوية، بنفس الأسلوب المستخدم في تطبيقات مشابهة تمتثل للسياسة.
   Widget _adCard(double width, double height) {
     return Container(
       width: width,
@@ -2640,7 +2708,26 @@ class HomeScreen extends StatelessWidget {
                 child: SizedBox(
                     width: width * 0.9,
                     height: height * 0.8,
-                    child: const BannerAdWidget(adSize: AdSize.banner)))
+                    child: const BannerAdWidget(adSize: AdSize.banner))),
+            // ✅ شارة "إعلان" — تجعل الإعلان قابلاً للتمييز فوراً عن بطاقات
+            // الخلفيات الحقيقية المحيطة به في نفس القائمة.
+            Positioned(
+              top: 6,
+              left: 6,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.55),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.25))),
+                child: Text('إعلان',
+                    style: GoogleFonts.poppins(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600)),
+              ),
+            ),
           ])),
     );
   }
@@ -3535,6 +3622,9 @@ void main() async {
     // استمر في تشغيل التطبيق حتى لو فشل Firebase
   }
 
+  // ✅ 2. تهيئة الإشعارات (إعداد القنوات والمستمعين فقط — بدون طلب إذن
+  // النظام هنا؛ طلب الإذن الفعلي يحدث لاحقاً ضمن تسلسل onboarding في
+  // MainLayout عبر NotificationService.requestPermissionAndSubscribe())
   try {
     await NotificationService.initialize();
     AppLogger.success('✅ Notification service initialized');
@@ -3558,6 +3648,11 @@ void main() async {
 
   await Future.wait(
       [favProvider.load(), privacyProvider.load(), coinsProvider.load()]);
+
+  // ✅ إصلاح: giveWelcomeBonus() كانت موجودة لكن لم تُستدعَ في أي مكان،
+  // فكان كل مستخدم جديد يبدأ برصيد 0 عملة ولا يستطيع تحميل أي صورة (يحتاج
+  // 10 عملات) قبل مشاهدة إعلانين على الأقل. الآن تُمنح العملات الترحيبية
+  // تلقائياً لأي مستخدم جديد عند أول فتح للتطبيق.
   await coinsProvider.giveWelcomeBonus();
 
   runApp(
