@@ -13,6 +13,13 @@ import UserNotifications
 
     if #available(iOS 10.0, *) {
       UNUserNotificationCenter.current().delegate = self
+      UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound]) { granted, error in
+        if granted {
+          DispatchQueue.main.async {
+            application.registerForRemoteNotifications()
+          }
+        }
+      }
     }
 
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
