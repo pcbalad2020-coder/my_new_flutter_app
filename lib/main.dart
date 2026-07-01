@@ -17,8 +17,6 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
-
-// ✅ إضافة مكتبات Firebase للإشعارات
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -40,15 +38,6 @@ class NotificationService {
 
   static final GlobalKey<NavigatorState> navigatorKey =
       GlobalKey<NavigatorState>();
-
-  // ✅ إصلاح "يطلب الإذن مرتين": initialize() الآن يهيّئ كل شيء (القنوات،
-  // المستمعين، إلخ) لكنه لا يطلب إذن الإشعارات من النظام مباشرة عند بدء
-  // التطبيق. السبب: كانت هذه النافذة تظهر فوراً عند الإقلاع، وبعدها بثوانٍ
-  // تظهر نافذة إذن الصور بعد الموافقة على سياسة الخصوصية — نافذتا نظام
-  // متتاليتان تُحسّان للمستخدم وكأنه "نفس الطلب يتكرر". الحل: نفصل طلب إذن
-  // الإشعارات إلى requestPermissionAndSubscribe() ونستدعيها بعد انتهاء تدفق
-  // الترحيب (بعد قبول سياسة الخصوصية وطلب إذن الصور)، بحيث تظهر نافذتا
-  // النظام بفاصل واضح ومنطقي للمستخدم بدل أن تتلاحقا.
   static Future<void> initialize() async {
     // 1. معالجة رسائل الخلفية
     FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
@@ -56,11 +45,6 @@ class NotificationService {
     // ✅ التصحيح #1: هيّئ flutter_local_notifications أولاً قبل طلب أي إذن
     const AndroidInitializationSettings androidSettings =
         AndroidInitializationSettings('@mipmap/launcher_icon');
-
-    // ✅ التصحيح #2: لم نعد نطلب الإذن تلقائياً هنا (requestAlertPermission:
-    // false وما شابه) — أصبح الطلب يحدث بشكل صريح وموحّد فقط داخل
-    // requestPermissionAndSubscribe()، لتفادي أي طلب إذن مكرر أو غير منسّق
-    // بين iOS المحلي و FCM.
     const DarwinInitializationSettings iosSettings =
         DarwinInitializationSettings(
       requestAlertPermission: false,
@@ -75,8 +59,6 @@ class NotificationService {
 
     await _localNotifications.initialize(
       initSettings,
-      // ✅ التصحيح #3: معالج الضغط على الإشعار المحلي (كان غائباً تماماً!)
-      // بدونه، الضغط على إشعار ظاهر في iOS بينما التطبيق بالمقدمة لن يفعل شيء
       onDidReceiveNotificationResponse: _onLocalNotificationTap,
     );
 
@@ -91,10 +73,6 @@ class NotificationService {
         .resolvePlatformSpecificImplementation<
             AndroidFlutterLocalNotificationsPlugin>()
         ?.createNotificationChannel(channel);
-
-    // ✅ التصحيح #5: الأهم لـ iOS — بدون هذا السطر، iOS لا يعرض
-    // الإشعار الأصلي من FCM أثناء كون التطبيق بالمقدمة، ولا تصل
-    // onMessage في بعض الحالات بشكل موثوق
     await _fcm.setForegroundNotificationPresentationOptions(
       alert: true,
       badge: true,
@@ -117,8 +95,6 @@ class NotificationService {
               channelDescription: channel.description,
               icon: '@mipmap/launcher_icon',
             ),
-            // ✅ التصحيح #6: تفصيل iOS كان فاضياً تماماً (const DarwinNotificationDetails())
-            // وهذا يعني عدم وجود presentAlert/presentSound بشكل صريح
             iOS: const DarwinNotificationDetails(
               presentAlert: true,
               presentBadge: true,
@@ -140,18 +116,15 @@ class NotificationService {
     }
   }
 
-  // ✅ جديد: يُستدعى بعد انتهاء تدفق الترحيب (سياسة الخصوصية + إذن الصور)
-  // بدل استدعائه فوراً عند بدء التطبيق. يضمن عدم ظهور نافذتي إذن نظام
-  // متتاليتين، ويتحقق أولاً إن كان قد طُلب من قبل لتجنّب الطلب المكرر في كل
-  // مرة يُفتح التطبيق.
   static Future<void> requestPermissionAndSubscribe() async {
     final prefs = await SharedPreferences.getInstance();
     final alreadyAsked =
         prefs.getBool('notification_permission_asked') ?? false;
+
     if (alreadyAsked) {
-      // لا نعيد طلب الإذن من النظام في كل تشغيل، فقط نتحقق ونشترك إن سُمح.
-      final status = await Permission.notification.status;
-      if (status.isGranted) unawaited(_subscribeAndLogToken());
+      if (await _hasNotificationPermission()) {
+        unawaited(_subscribeAndLogToken());
+      }
       return;
     }
 
@@ -162,6 +135,23 @@ class NotificationService {
     if (granted) {
       unawaited(_subscribeAndLogToken());
     }
+  }
+
+  static Future<bool> _hasNotificationPermission() async {
+    if (Platform.isAndroid) {
+      final sdkInt = await _androidSdkInt();
+      if (sdkInt < 33) return true;
+      final status = await Permission.notification.status;
+      return status.isGranted;
+    }
+
+    if (Platform.isIOS) {
+      final settings = await _fcm.getNotificationSettings();
+      return settings.authorizationStatus == AuthorizationStatus.authorized ||
+          settings.authorizationStatus == AuthorizationStatus.provisional;
+    }
+
+    return true;
   }
 
   static Future<void> _subscribeAndLogToken() async {
@@ -209,48 +199,55 @@ class NotificationService {
 
   // ✅ التصحيح #9: ترجع bool الآن لمعرفة هل سُمح بالإذن فعلاً أم لا
   static Future<bool> _requestPermissions() async {
-    // ✅ التصحيح #11: طلب صلاحية الإشعارات الصريحة على أندرويد 13+ (API 33+)
-    // بدون هذا، الإشعارات لا تظهر إطلاقاً على أندرويد 13 فما فوق
     if (Platform.isAndroid) {
-      final status = await Permission.notification.request();
-      if (!status.isGranted) {
-        AppLogger.warning(
-            '⚠️ Android notification permission not granted: $status');
+      final sdkInt = await _androidSdkInt();
+      if (sdkInt >= 33) {
+        final status = await Permission.notification.status;
+        if (status.isPermanentlyDenied) {
+          await openAppSettings();
+          return false;
+        }
+        if (!status.isGranted) {
+          final requested = await Permission.notification.request();
+          if (!requested.isGranted) {
+            AppLogger.warning(
+                '⚠️ Android notification permission not granted: $requested');
+            return false;
+          }
+        }
       }
     }
 
-    NotificationSettings settings;
     if (Platform.isIOS) {
-      settings = await _fcm.requestPermission(
+      final settings = await _fcm.requestPermission(
         alert: true,
         badge: true,
         sound: true,
         provisional: false,
-        // ✅ التصحيح #10: announcement و criticalAlert كانا غائبين
-        // (ليسا ضروريين لكن يحسنان من بعض السلوكيات على iOS 15+)
         announcement: false,
         carPlay: false,
         criticalAlert: false,
       );
-    } else {
-      settings = await _fcm.requestPermission(
-        alert: true,
-        badge: true,
-        sound: true,
-      );
+      final granted =
+          settings.authorizationStatus == AuthorizationStatus.authorized ||
+              settings.authorizationStatus == AuthorizationStatus.provisional;
+
+      if (!granted) {
+        AppLogger.warning(
+            '⚠️ User declined or has not accepted notification permissions: '
+            '${settings.authorizationStatus}');
+      }
+
+      return granted;
     }
 
-    final granted =
-        settings.authorizationStatus == AuthorizationStatus.authorized ||
-            settings.authorizationStatus == AuthorizationStatus.provisional;
+    return true;
+  }
 
-    if (!granted) {
-      AppLogger.warning(
-          '⚠️ User declined or has not accepted notification permissions: '
-          '${settings.authorizationStatus}');
-    }
-
-    return granted;
+  static Future<int> _androidSdkInt() async {
+    final deviceInfo = DeviceInfoPlugin();
+    final androidInfo = await deviceInfo.androidInfo;
+    return androidInfo.version.sdkInt;
   }
 }
 
@@ -267,29 +264,8 @@ class AppLogger {
 // =============================================================================
 // 🔐 GALLERY PERMISSION HELPER — منطق موحّد لإذن حفظ الصور
 // =============================================================================
-// ✅ إصلاح جوهري: تمت إزالة Permission.manageExternalStorage بالكامل.
-//
-// لماذا كان هذا خاطئاً:
-// 1) هذا إذن "الوصول لكل الملفات" (All Files Access) ولا يظهر كنافذة نظام
-//    عادية، بل يفتح شاشة إعدادات خاصة — وهذا يفسّر تذبذب السلوك بين الأجهزة
-//    ("ما تعمل على بعض الأجهزة")، لأن بعض الأجهزة/الإصدارات تتعامل معه
-//    بشكل مختلف ولا يعطي نتيجة "granted" مباشرة كباقي الأذونات العادية.
-// 2) Google Play يرفض التطبيقات التي تطلب هذا الإذن دون مبرر مشروع (مدير
-//    ملفات / تطبيق نسخ احتياطي / مضاد فيروسات). تطبيق خلفيات لا يستوفي هذا
-//    الشرط، وطلبه سيؤدي تقريباً لرفض التطبيق أثناء المراجعة.
-// 3) الأهم: حفظ الصور يتم عبر SaverGallery الذي يستخدم MediaStore API
-//    (التخزين المحدود/Scoped Storage). ابتداءً من Android 10 (API 29) لا
-//    يحتاج التطبيق أي إذن لإضافة ملف جديد ينشئه هو نفسه إلى المعرض. لذلك:
-//      • API 33+  → نطلب READ_MEDIA_IMAGES (Permission.photos) فقط
-//      • API 29-32 → لا حاجة لأي إذن إطلاقاً للحفظ
-//      • أقل من 29 → نطلب WRITE_EXTERNAL_STORAGE (Permission.storage)
-//
-// هذا المنطق موحّد هنا ويُستخدم من DownloadService و PermissionsInitializer
-// معاً، بدل وجود نسختين مختلفتين قد تتعارضا.
+
 class GalleryPermission {
-  /// يتحقق هل التطبيق يملك الإذن المطلوب فعلياً لحفظ صورة جديدة في المعرض.
-  /// يرجع true إذا كان الإذن "ممنوح" أو إذا لم يكن مطلوباً أصلاً لهذا
-  /// الإصدار من النظام (Scoped Storage).
   static Future<bool> isGranted() async {
     if (Platform.isIOS) {
       final status = await Permission.photos.status;
@@ -318,17 +294,12 @@ class GalleryPermission {
       return status.isGranted;
     }
     if (sdkInt >= 29) {
-      // Scoped Storage: لا حاجة لإذن — النظام يسمح للتطبيق بحفظ ملفاته
-      // الخاصة في المعرض عبر MediaStore بدون أي إذن وقت التشغيل.
       return true;
     }
     final status = await Permission.storage.request();
     return status.isGranted;
   }
 
-  /// يرجع true إذا تم رفض الإذن نهائياً ("Don't ask again") ويحتاج فتح
-  /// إعدادات التطبيق يدوياً، بدل إعادة محاولة طلب الإذن من النظام (لأن
-  /// النظام لن يُظهر نافذة طلب إذن أخرى في هذه الحالة).
   static Future<bool> isPermanentlyDenied() async {
     if (Platform.isIOS) {
       return (await Permission.photos.status).isPermanentlyDenied;
@@ -393,11 +364,6 @@ class AdMobManager {
   DateTime? _appOpenLoadTime;
   int _viewCount = 0;
   static const int _interstitialInterval = 5;
-  // ✅ إصلاح: عداد عرض الخلفيات كان متغيراً في الذاكرة فقط، يُصفَّر لـ 0
-  // عند كل إعادة فتح للتطبيق. هذا يعني أن مستخدماً يعيد فتح التطبيق
-  // كثيراً قد يشاهد إعلانات بينية أكثر من المقصود (كل 5 خلفيات "من جديد"
-  // كل مرة بدل احتساب تراكمي). الآن نُحفظ العداد في SharedPreferences
-  // ونحمّله عند initialize() بحيث يستمر التتابع بين الجلسات.
   static const String _viewCountKey = 'admob_wallpaper_view_count';
 
   Future<void> initialize() async {
