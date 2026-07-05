@@ -22,7 +22,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 // =============================================================================
-// 🔔 NOTIFICATION SERVICE — خدمة الإشعارات
+// 🔔 NOTIFICATION SERVICE — 1خدمة الإشعارات
 // =============================================================================
 
 @pragma('vm:entry-point')
@@ -39,80 +39,97 @@ class NotificationService {
   static final GlobalKey<NavigatorState> navigatorKey =
       GlobalKey<NavigatorState>();
   static Future<void> initialize() async {
-    // 1. معالجة رسائل الخلفية
-    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+    try {
+      // 1. معالجة رسائل الخلفية
+      FirebaseMessaging.onBackgroundMessage(
+          _firebaseMessagingBackgroundHandler);
 
-    // ✅ التصحيح #1: هيّئ flutter_local_notifications أولاً قبل طلب أي إذن
-    const AndroidInitializationSettings androidSettings =
-        AndroidInitializationSettings('@mipmap/launcher_icon');
-    const DarwinInitializationSettings iosSettings =
-        DarwinInitializationSettings(
-      requestAlertPermission: false,
-      requestBadgePermission: false,
-      requestSoundPermission: false,
-    );
+      // ✅ التصحيح #1: هيّئ flutter_local_notifications أولاً قبل طلب أي إذن
+      const AndroidInitializationSettings androidSettings =
+          AndroidInitializationSettings('@mipmap/launcher_icon');
+      const DarwinInitializationSettings iosSettings =
+          DarwinInitializationSettings(
+        requestAlertPermission: false,
+        requestBadgePermission: false,
+        requestSoundPermission: false,
+      );
 
-    const InitializationSettings initSettings = InitializationSettings(
-      android: androidSettings,
-      iOS: iosSettings,
-    );
+      const InitializationSettings initSettings = InitializationSettings(
+        android: androidSettings,
+        iOS: iosSettings,
+      );
 
-    await _localNotifications.initialize(
-      initSettings,
-      onDidReceiveNotificationResponse: _onLocalNotificationTap,
-    );
+      await _localNotifications.initialize(
+        initSettings,
+        onDidReceiveNotificationResponse: _onLocalNotificationTap,
+      );
 
-    // قناة إشعارات أندرويد
-    const AndroidNotificationChannel channel = AndroidNotificationChannel(
-      'high_importance_channel',
-      'High Importance Notifications',
-      description: 'This channel is used for important notifications.',
-      importance: Importance.high,
-    );
-    await _localNotifications
-        .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>()
-        ?.createNotificationChannel(channel);
-    await _fcm.setForegroundNotificationPresentationOptions(
-      alert: true,
-      badge: true,
-      sound: true,
-    );
+      // قناة إشعارات أندرويد
+      const AndroidNotificationChannel channel = AndroidNotificationChannel(
+        'high_importance_channel',
+        'High Importance Notifications',
+        description: 'This channel is used for important notifications.',
+        importance: Importance.high,
+      );
+      await _localNotifications
+          .resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin>()
+          ?.createNotificationChannel(channel);
+      await _fcm.setForegroundNotificationPresentationOptions(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
 
-    // الاستماع للإشعارات في المقدمة (Foreground)
-    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-      RemoteNotification? notification = message.notification;
-      AppLogger.info('📩 Foreground message received: ${message.messageId}');
-      if (notification != null) {
-        _localNotifications.show(
-          notification.hashCode,
-          notification.title,
-          notification.body,
-          NotificationDetails(
-            android: AndroidNotificationDetails(
-              channel.id,
-              channel.name,
-              channelDescription: channel.description,
-              icon: '@mipmap/launcher_icon',
-            ),
-            iOS: const DarwinNotificationDetails(
-              presentAlert: true,
-              presentBadge: true,
-              presentSound: true,
-            ),
-          ),
-          payload: jsonEncode(message.data),
-        );
+      // الاستماع للإشعارات في المقدمة (Foreground)
+      FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+        try {
+          RemoteNotification? notification = message.notification;
+          AppLogger.info(
+              '📩 Foreground message received: ${message.messageId}');
+          if (notification != null) {
+            _localNotifications.show(
+              notification.hashCode,
+              notification.title,
+              notification.body,
+              NotificationDetails(
+                android: AndroidNotificationDetails(
+                  channel.id,
+                  channel.name,
+                  channelDescription: channel.description,
+                  icon: '@mipmap/launcher_icon',
+                ),
+                iOS: const DarwinNotificationDetails(
+                  presentAlert: true,
+                  presentBadge: true,
+                  presentSound: true,
+                ),
+              ),
+              payload: jsonEncode(message.data),
+            );
+          }
+        } catch (e) {
+          AppLogger.error('❌ Error handling foreground message: $e');
+        }
+      });
+
+      // عند الضغط على الإشعار (والتطبيق في الخلفية)
+      FirebaseMessaging.onMessageOpenedApp
+          .listen(_handleNotificationNavigation);
+
+      // التحقق إذا فُتح التطبيق من خلال إشعار (والتطبيق مغلق تماماً)
+      try {
+        RemoteMessage? initialMessage = await _fcm.getInitialMessage();
+        if (initialMessage != null) {
+          _handleNotificationNavigation(initialMessage);
+        }
+      } catch (e) {
+        AppLogger.error('❌ Error handling initial notification: $e');
       }
-    });
-
-    // عند الضغط على الإشعار (والتطبيق في الخلفية)
-    FirebaseMessaging.onMessageOpenedApp.listen(_handleNotificationNavigation);
-
-    // التحقق إذا فُتح التطبيق من خلال إشعار (والتطبيق مغلق تماماً)
-    RemoteMessage? initialMessage = await _fcm.getInitialMessage();
-    if (initialMessage != null) {
-      _handleNotificationNavigation(initialMessage);
+    } catch (e) {
+      AppLogger.error(
+          '❌ Critical error in NotificationService.initialize(): $e');
+      rethrow;
     }
   }
 
@@ -179,21 +196,33 @@ class NotificationService {
   }
 
   static void _handleNotificationNavigation(RemoteMessage message) {
-    print('Message clicked! ${message.data}');
-    final data = message.data;
+    try {
+      print('Message clicked! ${message.data}');
+      final data = message.data;
 
-    if (data['action'] == 'open_category' && data['category'] != null) {
-      String category = data['category'];
-      navigatorKey.currentState?.push(
-        MaterialPageRoute(
-          builder: (context) =>
-              CategoryWallpapersScreen(categoryName: category),
-        ),
-      );
-    } else if (data['action'] == 'open_wallpaper' &&
-        data['wallpaper_id'] != null) {
-      String wallpaperId = data['wallpaper_id'];
-      // ... كود الفتح
+      // ✅ تحقق من أن navigator جاهز قبل الاستخدام
+      if (navigatorKey.currentState == null) {
+        AppLogger.warning(
+            '⚠️ Navigator not ready yet, skipping notification navigation');
+        return;
+      }
+
+      if (data['action'] == 'open_category' && data['category'] != null) {
+        String category = data['category'];
+        navigatorKey.currentState?.push(
+          MaterialPageRoute(
+            builder: (context) =>
+                CategoryWallpapersScreen(categoryName: category),
+          ),
+        );
+      } else if (data['action'] == 'open_wallpaper' &&
+          data['wallpaper_id'] != null) {
+        String wallpaperId = data['wallpaper_id'];
+        // يمكن إضافة منطق فتح الخلفية المحددة هنا لاحقاً
+        AppLogger.info('📸 Opening wallpaper: $wallpaperId');
+      }
+    } catch (e) {
+      AppLogger.error('❌ Error in _handleNotificationNavigation: $e');
     }
   }
 
@@ -520,10 +549,6 @@ class AdMobManager {
     return false;
   }
 
-  // ✅ إصلاح توقيت إعلان App Open: الآن تقبل الدالة onComplete اختياري —
-  // يُستدعى فقط بعد عرض/رفض/فشل الإعلان، حتى يستطيع المتصل (شاشة الـ
-  // Splash) الانتظار قبل الانتقال للمحتوى الحقيقي، بدل استدعاء الانتقال
-  // بالتوازي مع طلب عرض الإعلان كما كان سابقاً.
   void showAppOpenAd({VoidCallback? onComplete}) {
     if (!_isAppOpenAdAvailable || _isShowingAd) {
       _loadAppOpenAd();
@@ -792,12 +817,15 @@ class GitHubService {
       }
       return [];
     } on DioException catch (e) {
+      AppLogger.warning('⚠️ DioException fetching $repoName: ${e.message}');
       try {
         return await _fetchViaTrees(repoName);
       } catch (err) {
+        AppLogger.error('❌ Fallback _fetchViaTrees also failed: $err');
         return [];
       }
     } catch (e) {
+      AppLogger.error('❌ Error fetching wallpapers from $repoName: $e');
       return [];
     }
   }
@@ -990,9 +1018,6 @@ class DownloadService {
     }
   }
 
-  // ✅ إصلاح: الآن تستخدم منطق GalleryPermission الموحّد بدل التحقق اليدوي
-  // المكرر والمختلف عن النسخة الموجودة في PermissionsInitializer، ودون
-  // استخدام Permission.manageExternalStorage الخاطئ.
   static Future<bool> _requestStoragePermission(BuildContext context) async {
     final granted = await GalleryPermission.request();
     if (granted) return true;
@@ -1237,10 +1262,6 @@ class PermissionsInitializer {
       attempts++;
       if (!context.mounted) return;
 
-      // ✅ إصلاح: إذا رفض المستخدم نهائياً ("Don't ask again")، فالنظام لن
-      // يُظهر نافذة طلب إذن أخرى بعد الآن. عرض نافذة "إعادة المحاولة" في
-      // هذه الحالة كان بلا فائدة (تضغط "السماح" ولا يحدث شيء). الحل الصحيح
-      // هو توجيه المستخدم مباشرة لإعدادات التطبيق.
       if (await GalleryPermission.isPermanentlyDenied()) {
         openAppSettings();
         return;
@@ -1454,7 +1475,7 @@ We strive to protect your technical data using appropriate security measures, bu
 [AR] 6. خصوصية الأطفال
 هذا التطبيق غير موجه للأطفال دون سن 13 عاماً، ونحن لا نجمع أي بيانات تخصهم بشكل متعمد.
 
-[EN] 6. Children’s Privacy
+[EN] 6. Children's Privacy
 This application is not intended for or directed at children under the age of 13.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1937,16 +1958,6 @@ class _SplashScreenState extends State<SplashScreen>
         curve: const Interval(0.5, 1.0, curve: Curves.easeIn)));
     _controller.forward();
 
-    // ✅ إصلاح توقيت إعلان App Open ليطابق توصية Google الرسمية: "يجب أن
-    // يظهر الإعلان فوق شاشة التحميل، وتبقى شاشة التحميل ظاهرة تحته" — لا
-    // أن يظهر بعد انتهائها بالتوازي مع الانتقال للمحتوى الحقيقي (وهو النمط
-    // الذي تُحذّر منه إرشادات AdMob لأنه قد يُصنَّف كاستخدام غير ملائم).
-    //
-    // التغيير: نطلب عرض الإعلان مباشرة عند تركيب الشاشة (بينما شاشة
-    // الـ Splash المتحركة لا تزال ظاهرة بالكامل خلفه)، وننتقل لـ MainLayout
-    // فقط بعد توفر الشرطين معاً: (1) انتهاء/رفض الإعلان أو تأكدنا أنه غير
-    // متاح، و(2) انقضاء المدة الدنيا لعرض شاشة الـ Splash — أيهما يكتمل
-    // أخيراً هو من يُطلق الانتقال، مع حارس يمنع تكرار الانتقال مرتين.
     bool adFinished = false;
     bool splashTimeElapsed = false;
     bool navigated = false;
@@ -2228,7 +2239,7 @@ class _PreviewScreenState extends State<PreviewScreen> {
                       Expanded(
                         child: _ActionButton(
                           icon: Icons.download_rounded,
-                          label: 'تحميل (10 🪙)', // ✅ تحديث نص الزر
+                          label: 'تحميل (10 🪙)',
                           color: Colors.blueAccent,
                           onTap: () => _handleDownload(context, wallpaper),
                         ),
@@ -2483,7 +2494,6 @@ class HomeScreen extends StatelessWidget {
                 fontSize: 24,
                 color: Colors.white)),
         actions: [
-          // ✅ شارة عرض الرصيد
           Consumer<CoinsProvider>(
             builder: (context, coins, _) => Container(
               margin: const EdgeInsets.only(right: 8),
@@ -2645,11 +2655,6 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
-  // ✅ إصلاح سياسة AdMob: يجب أن يكون الإعلان قابلاً للتمييز بوضوح عن
-  // المحتوى الحقيقي. كانت هذه البطاقة مصممة بنفس شكل بطاقات الخلفيات
-  // تماماً (نفس الزوايا، نفس الحجم) بدون أي تسمية — وهذا يخالف سياسة
-  // AdMob الخاصة بوضوح تمييز الإعلانات. أضفنا شارة "إعلان" واضحة في
-  // الزاوية، بنفس الأسلوب المستخدم في تطبيقات مشابهة تمتثل للسياسة.
   Widget _adCard(double width, double height) {
     return Container(
       width: width,
@@ -2675,8 +2680,6 @@ class HomeScreen extends StatelessWidget {
                     width: width * 0.9,
                     height: height * 0.8,
                     child: const BannerAdWidget(adSize: AdSize.banner))),
-            // ✅ شارة "إعلان" — تجعل الإعلان قابلاً للتمييز فوراً عن بطاقات
-            // الخلفيات الحقيقية المحيطة به في نفس القائمة.
             Positioned(
               top: 6,
               left: 6,
@@ -3484,12 +3487,6 @@ class _MainLayoutState extends State<MainLayout> {
         .addPostFrameCallback((_) => _checkPrivacyThenPermissions());
   }
 
-  // ✅ إصلاح "يطلب الإذن مرتين": الآن نتبع تسلسلاً واحداً واضحاً:
-  // 1) سياسة الخصوصية (إن لم تُقبل بعد)
-  // 2) إذن الصور/المعرض (مطلوب فعلياً لحفظ الخلفيات)
-  // 3) إذن الإشعارات (بعد انتهاء الخطوتين أعلاه، بفاصل واضح للمستخدم)
-  // بدل أن يطلب main() إذن الإشعارات فوراً عند الإقلاع بينما تُطلب أذونات
-  // الصور بعد ذلك بثوانٍ — وهو ما كان يبدو للمستخدم كطلب مكرر.
   void _checkPrivacyThenPermissions() {
     final privacyProvider = context.read<PrivacyProvider>();
     if (!privacyProvider.accepted) {
@@ -3500,12 +3497,16 @@ class _MainLayoutState extends State<MainLayout> {
         if (!mounted) return;
         await PermissionsInitializer.requestOnFirstLaunch(context);
         if (!mounted) return;
-        await NotificationService.requestPermissionAndSubscribe();
+        if (Platform.isAndroid) {
+          await NotificationService.requestPermissionAndSubscribe();
+        }
       });
     } else {
       PermissionsInitializer.requestOnFirstLaunch(context).then((_) async {
         if (!mounted) return;
-        await NotificationService.requestPermissionAndSubscribe();
+        if (Platform.isAndroid) {
+          await NotificationService.requestPermissionAndSubscribe();
+        }
       });
     }
   }
@@ -3564,7 +3565,6 @@ class WallpaperApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: '4K خلفيات',
-      // ✅ إضافة navigatorKey
       navigatorKey: NotificationService.navigatorKey,
       theme: ThemeData.dark().copyWith(
           scaffoldBackgroundColor: Colors.transparent,
@@ -3575,27 +3575,29 @@ class WallpaperApp extends StatelessWidget {
   }
 }
 
-// ✅ دالة main() المحدثة مع Firebase والإشعارات
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // ✅ 1. تهيئة Firebase (ضروري جداً)
-  try {
-    await Firebase.initializeApp();
-    AppLogger.success('✅ Firebase initialized successfully');
-  } catch (e) {
-    AppLogger.error('❌ Firebase initialization failed: $e');
-    // استمر في تشغيل التطبيق حتى لو فشل Firebase
+  // ✅ Firebase مُعطّل تماماً على iOS لهذه النسخة (خطوة تشخيصية) - يعمل على أندرويد فقط
+  if (Platform.isAndroid) {
+    try {
+      await Firebase.initializeApp();
+      AppLogger.success('✅ Firebase initialized successfully');
+    } catch (e) {
+      AppLogger.error('❌ Firebase initialization failed: $e');
+    }
+  } else {
+    AppLogger.info('ℹ️ Firebase disabled on iOS for this build');
   }
 
-  // ✅ 2. تهيئة الإشعارات (إعداد القنوات والمستمعين فقط — بدون طلب إذن
-  // النظام هنا؛ طلب الإذن الفعلي يحدث لاحقاً ضمن تسلسل onboarding في
-  // MainLayout عبر NotificationService.requestPermissionAndSubscribe())
-  try {
-    await NotificationService.initialize();
-    AppLogger.success('✅ Notification service initialized');
-  } catch (e) {
-    AppLogger.error('❌ Notification service failed: $e');
+  // ✅ خدمة الإشعارات مبنية على Firebase Messaging - تعمل على أندرويد فقط بنفس السبب
+  if (Platform.isAndroid) {
+    try {
+      await NotificationService.initialize();
+      AppLogger.success('✅ Notification service initialized');
+    } catch (e) {
+      AppLogger.error('❌ Notification service failed: $e');
+    }
   }
 
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
@@ -3615,10 +3617,6 @@ void main() async {
   await Future.wait(
       [favProvider.load(), privacyProvider.load(), coinsProvider.load()]);
 
-  // ✅ إصلاح: giveWelcomeBonus() كانت موجودة لكن لم تُستدعَ في أي مكان،
-  // فكان كل مستخدم جديد يبدأ برصيد 0 عملة ولا يستطيع تحميل أي صورة (يحتاج
-  // 10 عملات) قبل مشاهدة إعلانين على الأقل. الآن تُمنح العملات الترحيبية
-  // تلقائياً لأي مستخدم جديد عند أول فتح للتطبيق.
   await coinsProvider.giveWelcomeBonus();
 
   runApp(
