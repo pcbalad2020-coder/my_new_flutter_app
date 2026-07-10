@@ -359,22 +359,22 @@ class AdMobIds {
 
   static String get interstitialAdUnitId {
     if (Platform.isAndroid) return 'ca-app-pub-4756404048214956/7589450639';
-    return 'ca-app-pub-3940256099942544/4411468910';
+    return 'ca-app-pub-4756404048214956/7085755851';
   }
 
   static String get rewardedAdUnitId {
     if (Platform.isAndroid) return 'ca-app-pub-4756404048214956/8168076692';
-    return 'ca-app-pub-3940256099942544/1712485313';
+    return 'ca-app-pub-4756404048214956/8175476247';
   }
 
   static String get nativeAdUnitId {
     if (Platform.isAndroid) return 'ca-app-pub-4756404048214956/2620236541';
-    return 'ca-app-pub-3940256099942544/3986624511';
+    return 'ca-app-pub-4756404048214956/1223055087';
   }
 
   static String get appOpenAdUnitId {
     if (Platform.isAndroid) return 'ca-app-pub-4756404048214956/7070617440';
-    return 'ca-app-pub-3940256099942544/5575463023';
+    return 'ca-app-pub-4756404048214956/5549312903';
   }
 }
 
