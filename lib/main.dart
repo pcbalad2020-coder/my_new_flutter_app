@@ -758,6 +758,20 @@ class CategoryModel {
 // =============================================================================
 // 2. GITHUB SERVICE
 // =============================================================================
+//
+// ✅ إصلاحات هذه النسخة:
+// 1) الاعتماد الأساسي على jsDelivr CDN بدل raw.githubusercontent.com لعرض
+//    الصور — jsDelivr موزّع عالمياً (multi-region CDN) وأكثر ثباتاً من ناحية
+//    الوصول في شبكات/دول كثيرة، وليس له حدود Rate Limit كـ GitHub API.
+// 2) استخدام Git Trees API كمصدر أساسي لقائمة الملفات (طلب واحد فقط لكل
+//    مستودع) بدل Contents API، مع الرجوع التلقائي لـ Contents API كخطة بديلة
+//    فقط إذا فشل Trees API.
+// 3) رفع مهلات الاتصال (timeouts) لتلائم الشبكات الضعيفة.
+// 4) تسجيل تفصيلي لنوع الخطأ (DioExceptionType + status code) لتشخيص أسرع
+//    عند أي مستخدم يبلّغ عن مشكلة تحميل.
+// 5) رؤوس (headers) مخففة عند استخدام jsDelivr (لا حاجة لتوكن GitHub لعرض
+//    الصور، فقط لقراءة قائمة الملفات إن رغبت).
+// =============================================================================
 class GitHubService {
   static const String _owner = 'pcbalad2020-coder';
   static const String _branch = 'main';
@@ -782,54 +796,36 @@ class GitHubService {
   static final Map<String, DateTime> _cacheTimestamps = {};
   static const Duration _cacheDuration = Duration(hours: 2);
 
+  // ✅ مهلات أطول لتحمّل الشبكات البطيئة/غير المستقرة
   static final Dio _dio = Dio(BaseOptions(
     baseUrl: 'https://api.github.com',
-    connectTimeout: const Duration(seconds: 20),
-    receiveTimeout: const Duration(seconds: 30),
+    connectTimeout: const Duration(seconds: 30),
+    receiveTimeout: const Duration(seconds: 45),
     headers: {
       'Accept': 'application/vnd.github.v3+json',
-      'User-Agent': 'KM2-Wallpaper-App/1.1.0',
+      'User-Agent': 'KM2-Wallpaper-App/1.2.0',
       if (_token.isNotEmpty) 'Authorization': 'Bearer $_token',
     },
   ));
 
-  static Future<List<Map<String, dynamic>>> _fetchFromRepo(
-      String repoName) async {
-    try {
-      AppLogger.info('📥 Fetching: $repoName');
-      final response = await _dio.get(
-        '/repos/$_owner/$repoName/contents',
-        queryParameters: {'ref': _branch, 'per_page': 100},
-      );
-      if (response.statusCode == 200 && response.data is List) {
-        final data = response.data as List;
-        return data
-            .where((item) => item['type'] == 'file')
-            .where((item) {
-              final name = (item['name'] as String).toLowerCase();
-              return name.endsWith('.jpg') ||
-                  name.endsWith('.jpeg') ||
-                  name.endsWith('.png') ||
-                  name.endsWith('.webp');
-            })
-            .map((item) => item as Map<String, dynamic>)
-            .toList();
-      }
-      return [];
-    } on DioException catch (e) {
-      AppLogger.warning('⚠️ DioException fetching $repoName: ${e.message}');
-      try {
-        return await _fetchViaTrees(repoName);
-      } catch (err) {
-        AppLogger.error('❌ Fallback _fetchViaTrees also failed: $err');
-        return [];
-      }
-    } catch (e) {
-      AppLogger.error('❌ Error fetching wallpapers from $repoName: $e');
-      return [];
-    }
+  /// ✅ يحوّل مسار ملف داخل مستودع GitHub إلى رابط jsDelivr CDN.
+  /// jsDelivr يخدم أي ملف عام على GitHub عبر شبكة توزيع عالمية،
+  /// وهذا يحل مشاكل عدم ظهور الصور على أجهزة/شبكات معينة بسبب:
+  /// - Rate limiting الخاص بـ raw.githubusercontent.com / api.github.com
+  /// - حجب أو بطء الوصول لنطاقات GitHub في بعض الدول/الشبكات
+  static String _toJsDelivr({
+    required String owner,
+    required String repo,
+    required String branch,
+    required String path,
+  }) {
+    // ترميز كل جزء من المسار بشكل صحيح (أسماء ملفات عربية/مسافات ... الخ)
+    final encodedPath = path.split('/').map(Uri.encodeComponent).join('/');
+    return 'https://cdn.jsdelivr.net/gh/$owner/$repo@$branch/$encodedPath';
   }
 
+  /// ✅ المصدر الأساسي الجديد لقائمة الملفات: Git Trees API (طلب واحد فقط،
+  /// حتى لو كان هناك مئات الملفات) — بدل Contents API الذي كان يُستخدم أولاً.
   static Future<List<Map<String, dynamic>>> _fetchViaTrees(
       String repoName) async {
     final response = await _dio.get(
@@ -850,13 +846,84 @@ class GitHubService {
         final filename = path.split('/').last;
         return {
           'name': filename,
-          'download_url':
-              'https://raw.githubusercontent.com/$_owner/$repoName/$_branch/$path',
+          // ✅ استخدام jsDelivr بدل raw.githubusercontent.com
+          'download_url': _toJsDelivr(
+            owner: _owner,
+            repo: repoName,
+            branch: _branch,
+            path: path,
+          ),
           'type': 'file',
         };
       }).toList();
     }
     return [];
+  }
+
+  /// خطة بديلة (fallback) فقط إذا فشل Trees API — تستخدم Contents API،
+  /// لكن روابط الصور الناتجة منها تُحوَّل أيضاً إلى jsDelivr بدل الرابط
+  /// الخام المباشر من GitHub.
+  static Future<List<Map<String, dynamic>>> _fetchFromRepoContents(
+      String repoName) async {
+    final response = await _dio.get(
+      '/repos/$_owner/$repoName/contents',
+      queryParameters: {'ref': _branch, 'per_page': 100},
+    );
+    if (response.statusCode == 200 && response.data is List) {
+      final data = response.data as List;
+      return data.where((item) => item['type'] == 'file').where((item) {
+        final name = (item['name'] as String).toLowerCase();
+        return name.endsWith('.jpg') ||
+            name.endsWith('.jpeg') ||
+            name.endsWith('.png') ||
+            name.endsWith('.webp');
+      }).map((item) {
+        final name = item['name'] as String;
+        return {
+          'name': name,
+          // ✅ نفس التحويل إلى jsDelivr هنا أيضاً
+          'download_url': _toJsDelivr(
+            owner: _owner,
+            repo: repoName,
+            branch: _branch,
+            path: name,
+          ),
+          'type': 'file',
+        };
+      }).toList();
+    }
+    return [];
+  }
+
+  /// ✅ نقطة الدخول الموحّدة لجلب الملفات: تجرب Trees API أولاً (طلب واحد
+  /// وأكثر كفاءة)، وإذا فشل لأي سبب تنتقل تلقائياً لـ Contents API،
+  /// مع تسجيل مفصّل لنوع الخطأ لتسهيل التشخيص عبر تقارير المستخدمين.
+  static Future<List<Map<String, dynamic>>> _fetchFiles(String repoName) async {
+    try {
+      AppLogger.info('📥 Fetching (trees): $repoName');
+      final files = await _fetchViaTrees(repoName);
+      if (files.isNotEmpty) return files;
+      AppLogger.warning(
+          '⚠️ Trees API returned empty for $repoName, trying contents API');
+      return await _fetchFromRepoContents(repoName);
+    } on DioException catch (e) {
+      AppLogger.warning(
+          '⚠️ Trees API failed for $repoName | type=${e.type} | status=${e.response?.statusCode} | msg=${e.message}');
+      try {
+        return await _fetchFromRepoContents(repoName);
+      } on DioException catch (e2) {
+        AppLogger.error(
+            '❌ Contents API also failed for $repoName | type=${e2.type} | status=${e2.response?.statusCode} | msg=${e2.message}');
+        return [];
+      } catch (err) {
+        AppLogger.error(
+            '❌ Unexpected error in contents fallback for $repoName: $err');
+        return [];
+      }
+    } catch (e) {
+      AppLogger.error('❌ Unexpected error fetching $repoName: $e');
+      return [];
+    }
   }
 
   static Future<List<WallpaperModel>> getWallpapers(String categoryName) async {
@@ -869,7 +936,7 @@ class GitHubService {
     final repoName = repositories[categoryName];
     if (repoName == null) return [];
 
-    final files = await _fetchFromRepo(repoName);
+    final files = await _fetchFiles(repoName);
     final is169 = categoryName == '16:9' || categoryName == '16:9 Ratio';
     final wallpapers = files.map((file) {
       final name = file['name'] as String? ?? 'unnamed';
@@ -904,6 +971,7 @@ class GitHubService {
       final response = await _dio.get('/rate_limit');
       return response.statusCode == 200;
     } catch (e) {
+      AppLogger.error('❌ testConnection failed: $e');
       return false;
     }
   }
@@ -1058,7 +1126,7 @@ class _DownloadProgressDialogState extends State<_DownloadProgressDialog> {
           '${safeTitle}_${DateTime.now().millisecondsSinceEpoch}.jpg';
       final savePath = '${tempDir.path}/$fileName';
       final dio = Dio(BaseOptions(
-          connectTimeout: const Duration(seconds: 20),
+          connectTimeout: const Duration(seconds: 30),
           receiveTimeout: const Duration(seconds: 120)));
 
       await dio.download(
@@ -1090,6 +1158,7 @@ class _DownloadProgressDialogState extends State<_DownloadProgressDialog> {
         if (mounted) Navigator.of(context).pop();
       }
     } catch (e) {
+      AppLogger.error('❌ Download failed for ${widget.wallpaper.imageUrl}: $e');
       if (mounted) {
         setState(() {
           _error = true;
@@ -1627,10 +1696,14 @@ class WallpaperCard extends StatelessWidget {
                     imageUrl: wallpaper.thumbnailUrl,
                     fit: BoxFit.cover,
                     placeholder: (_, __) => const ShimmerLoadingCard(),
-                    errorWidget: (_, __, ___) => Container(
-                        color: Colors.grey[850],
-                        child: const Icon(Icons.broken_image,
-                            color: Colors.grey))),
+                    errorWidget: (_, __, error) {
+                      AppLogger.error(
+                          '❌ Image load failed: ${wallpaper.thumbnailUrl} | $error');
+                      return Container(
+                          color: Colors.grey[850],
+                          child: const Icon(Icons.broken_image,
+                              color: Colors.grey));
+                    }),
                 Container(
                     decoration: BoxDecoration(
                         gradient: LinearGradient(
@@ -1690,10 +1763,14 @@ class WallpaperCard169 extends StatelessWidget {
                   imageUrl: wallpaper.thumbnailUrl,
                   fit: BoxFit.cover,
                   placeholder: (_, __) => const ShimmerLoadingCard(),
-                  errorWidget: (_, __, ___) => Container(
-                      color: Colors.grey[850],
-                      child:
-                          const Icon(Icons.broken_image, color: Colors.grey))),
+                  errorWidget: (_, __, error) {
+                    AppLogger.error(
+                        '❌ Image load failed: ${wallpaper.thumbnailUrl} | $error');
+                    return Container(
+                        color: Colors.grey[850],
+                        child:
+                            const Icon(Icons.broken_image, color: Colors.grey));
+                  }),
               Container(
                   decoration: BoxDecoration(
                       gradient: LinearGradient(
@@ -2144,10 +2221,14 @@ class _PreviewScreenState extends State<PreviewScreen> {
                         child: const Center(
                             child: CircularProgressIndicator(
                                 color: Colors.blueAccent))),
-                    errorWidget: (_, __, ___) => Container(
-                        color: Colors.grey[900],
-                        child: const Icon(Icons.error,
-                            color: Colors.white, size: 48)))),
+                    errorWidget: (_, __, error) {
+                      AppLogger.error(
+                          '❌ Preview image load failed: ${wallpaper.imageUrl} | $error');
+                      return Container(
+                          color: Colors.grey[900],
+                          child: const Icon(Icons.error,
+                              color: Colors.white, size: 48));
+                    })),
             Positioned.fill(
                 child: Container(
                     decoration: BoxDecoration(
@@ -3248,7 +3329,7 @@ class SettingsScreen extends StatelessWidget {
                                     child: const Icon(Icons.wallpaper,
                                         color: Colors.white, size: 40))))),
                     const SizedBox(height: 16),
-                    Text('الإصدار 1.1',
+                    Text('الإصدار 1.2',
                         style: GoogleFonts.poppins(
                             color: Colors.grey[400], fontSize: 13)),
                     const SizedBox(height: 4),
