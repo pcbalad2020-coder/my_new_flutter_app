@@ -1,4 +1,4 @@
-name: Build iOS IPA for Sideloadly
+name: Build iOS IPA & Deploy Web
 
 on:
   push:
@@ -6,9 +6,9 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  # 1. جوب بناء نسخة الايفون (كما هي تماماً)
+  build-ios:
     runs-on: macos-latest
-
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
@@ -66,3 +66,28 @@ jobs:
       with:
         name: Sideload-Build
         path: build/ios/iphoneos/FlutterApp.ipa
+
+  # 2. جوب جديدة مخصصة لبناء الويب ونشره تلقائياً
+  deploy-web:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Flutter
+      uses: subosito/flutter-action@v2
+      with:
+        channel: 'stable'
+
+    - name: Install dependencies
+      run: flutter pub get
+
+    - name: Build Flutter Web
+      # تنبيه: استبدل 4k-wallpapers باسم مستودعك على جيتهاب إذا كان مختلفاً
+      run: flutter build web --base-href "/4k-wallpapers/" --release
+
+    - name: Deploy to GitHub Pages
+      uses: peaceiris/actions-gh-pages@v4
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_dir: ./build/web
