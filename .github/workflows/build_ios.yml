@@ -67,9 +67,12 @@ jobs:
         name: Sideload-Build
         path: build/ios/iphoneos/FlutterApp.ipa
 
-  # 2. جوب بناء الويب ونشره تلقائياً (تعديل اسم المستودع هنا)
+  # 2. جوب بناء الويب ونشره تلقائياً
   deploy-web:
     runs-on: ubuntu-latest
+    # هذن السطرين يمنحان الـ Workflow صلاحية الكتابة برمجياً لتخطي خطأ 403 بشكل قطعي
+    permissions:
+      contents: write
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
@@ -83,7 +86,6 @@ jobs:
       run: flutter pub get
 
     - name: Build Flutter Web
-      # تم تعديل الاسم هنا ليطابق مستودعك الحالي وضمان عمل الروابط بدون صفحات بيضاء
       run: flutter build web --base-href "/my_new_flutter_app/" --release
 
     - name: Deploy to GitHub Pages
