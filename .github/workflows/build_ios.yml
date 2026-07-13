@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  # 1. جوب بناء نسخة الايفون (كما هي تماماً)
+  # 1. جوب بناء نسخة الايفون
   build-ios:
     runs-on: macos-latest
     steps:
@@ -67,7 +67,7 @@ jobs:
         name: Sideload-Build
         path: build/ios/iphoneos/FlutterApp.ipa
 
-  # 2. جوب جديدة مخصصة لبناء الويب ونشره تلقائياً
+  # 2. جوب بناء الويب ونشره تلقائياً (تعديل اسم المستودع هنا)
   deploy-web:
     runs-on: ubuntu-latest
     steps:
@@ -83,8 +83,8 @@ jobs:
       run: flutter pub get
 
     - name: Build Flutter Web
-      # تنبيه: استبدل 4k-wallpapers باسم مستودعك على جيتهاب إذا كان مختلفاً
-      run: flutter build web --base-href "/4k-wallpapers/" --release
+      # تم تعديل الاسم هنا ليطابق مستودعك الحالي وضمان عمل الروابط بدون صفحات بيضاء
+      run: flutter build web --base-href "/my_new_flutter_app/" --release
 
     - name: Deploy to GitHub Pages
       uses: peaceiris/actions-gh-pages@v4
