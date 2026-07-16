@@ -2858,7 +2858,7 @@ class HomeScreen extends StatelessWidget {
 }
 
 // =============================================================================
-// 11.1 TOP AUTO SLIDER — سلايدر متحرك احترافي لصور 16:9
+// 11.1 TOP AUTO SLIDER — سلايدر زجاجي (Glassmorphism) لصور 16:9
 // =============================================================================
 class _TopAutoSlider169 extends StatefulWidget {
   const _TopAutoSlider169();
@@ -2868,25 +2868,17 @@ class _TopAutoSlider169 extends StatefulWidget {
 }
 
 class _TopAutoSlider169State extends State<_TopAutoSlider169> {
-  late final PageController _pageController;
+  final PageController _pageController = PageController();
   Timer? _timer;
   int _currentPage = 0;
-  double _livePage = 0;
   List<WallpaperModel> _wallpapers = [];
   bool _loading = true;
 
   static const int _maxSlides = 10;
-  static const double _viewportFraction = 0.90;
 
   @override
   void initState() {
     super.initState();
-    _pageController = PageController(viewportFraction: _viewportFraction);
-    _pageController.addListener(() {
-      if (_pageController.page != null) {
-        setState(() => _livePage = _pageController.page!);
-      }
-    });
     _loadWallpapers();
   }
 
@@ -2961,13 +2953,40 @@ class _TopAutoSlider169State extends State<_TopAutoSlider169> {
     );
   }
 
+  // ── حاوية زجاجية عامة (Glass container helper) ──
+  Widget _glass({
+    required Widget child,
+    double radius = 18,
+    double blur = 14,
+    double opacity = 0.14,
+    Border? border,
+    EdgeInsetsGeometry? padding,
+  }) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(radius),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
+        child: Container(
+          padding: padding,
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: opacity),
+            borderRadius: BorderRadius.circular(radius),
+            border: border ??
+                Border.all(color: Colors.white.withValues(alpha: 0.28)),
+          ),
+          child: child,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loading) {
       return Padding(
         padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(24),
+          borderRadius: BorderRadius.circular(26),
           child: const AspectRatio(
               aspectRatio: 16 / 9, child: ShimmerLoadingCard()),
         ),
@@ -2976,294 +2995,250 @@ class _TopAutoSlider169State extends State<_TopAutoSlider169> {
 
     if (_wallpapers.isEmpty) return const SizedBox.shrink();
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // ── عنوان القسم بشكل احترافي ──
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(children: [
-                Container(
-                  padding: const EdgeInsets.all(7),
-                  decoration: BoxDecoration(
-                      gradient: const LinearGradient(colors: [
-                        Colors.blueAccent,
-                        Colors.cyanAccent,
-                      ]),
-                      borderRadius: BorderRadius.circular(10),
-                      boxShadow: [
-                        BoxShadow(
-                            color: Colors.blueAccent.withValues(alpha: 0.4),
-                            blurRadius: 10,
-                            offset: const Offset(0, 3))
-                      ]),
-                  child: const Icon(Icons.auto_awesome_rounded,
-                      color: Colors.white, size: 15),
-                ),
-                const SizedBox(width: 10),
-                Text('خلفيات 16:9',
-                    style: GoogleFonts.poppins(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white)),
-              ]),
-              GestureDetector(
-                onTap: () => Navigator.push(context,
-                    MaterialPageRoute(builder: (_) => const Screen169())),
-                child: Container(
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ── عنوان زجاجي علوي ──
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                _glass(
+                  radius: 14,
                   padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                      color: Colors.blueAccent.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(20)),
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
                   child: Row(mainAxisSize: MainAxisSize.min, children: [
-                    Text('الكل',
+                    const Icon(Icons.crop_landscape_rounded,
+                        color: Colors.cyanAccent, size: 16),
+                    const SizedBox(width: 8),
+                    Text('مختارات 16:9',
                         style: GoogleFonts.poppins(
-                            color: Colors.blueAccent,
+                            fontSize: 15,
                             fontWeight: FontWeight.w600,
-                            fontSize: 13)),
-                    const SizedBox(width: 2),
-                    const Icon(Icons.arrow_back_ios_rounded,
-                        color: Colors.blueAccent, size: 11),
+                            color: Colors.white)),
                   ]),
                 ),
-              ),
-            ],
-          ),
-        ),
-        // ── الكاروسيل ──
-        SizedBox(
-          height: 205,
-          child: NotificationListener<ScrollNotification>(
-            onNotification: (notif) {
-              if (notif is ScrollStartNotification) _timer?.cancel();
-              if (notif is ScrollEndNotification) _restartAutoSlideDelayed();
-              return false;
-            },
-            child: PageView.builder(
-              controller: _pageController,
-              itemCount: _wallpapers.length,
-              onPageChanged: (i) => _currentPage = i,
-              itemBuilder: (context, index) {
-                final wallpaper = _wallpapers[index];
-                final delta = (index - _livePage).abs().clamp(0.0, 1.0);
-                final scale = 1 - (delta * 0.10);
-                final verticalPad = delta * 16;
-
-                return Transform.scale(
-                  scale: scale,
-                  child: Padding(
-                    padding: EdgeInsets.symmetric(
-                        horizontal: 7, vertical: verticalPad),
-                    child: GestureDetector(
-                      onTap: () => _openWallpaper(context, index),
-                      child: _SliderCard169(
-                        wallpaper: wallpaper,
-                        dimmed: delta > 0.15,
-                      ),
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-        ),
-        const SizedBox(height: 12),
-        // ── مؤشر الصفحات الاحترافي (worm indicator) ──
-        Center(
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: List.generate(_wallpapers.length, (i) {
-              final isActive = _currentPage == i;
-              return AnimatedContainer(
-                duration: const Duration(milliseconds: 350),
-                curve: Curves.easeInOutCubic,
-                margin: const EdgeInsets.symmetric(horizontal: 3),
-                width: isActive ? 22 : 6,
-                height: 6,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(4),
-                  gradient: isActive
-                      ? const LinearGradient(
-                          colors: [Colors.blueAccent, Colors.cyanAccent])
-                      : null,
-                  color: isActive ? null : Colors.white.withValues(alpha: 0.25),
-                ),
-              );
-            }),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _SliderCard169 extends StatelessWidget {
-  final WallpaperModel wallpaper;
-  final bool dimmed;
-  const _SliderCard169({required this.wallpaper, required this.dimmed});
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 300),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(22),
-        boxShadow: [
-          BoxShadow(
-              color: Colors.black.withValues(alpha: dimmed ? 0.15 : 0.35),
-              blurRadius: 18,
-              offset: const Offset(0, 8)),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(22),
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            Hero(
-              tag: 'slider_thumb_${wallpaper.id}',
-              child: CachedNetworkImage(
-                imageUrl: wallpaper.thumbnailUrl.isNotEmpty
-                    ? wallpaper.thumbnailUrl
-                    : wallpaper.imageUrl,
-                fit: BoxFit.cover,
-                fadeInDuration: const Duration(milliseconds: 350),
-                placeholder: (_, __) => const ShimmerLoadingCard(),
-                errorWidget: (_, __, ___) => Container(color: Colors.grey[900]),
-              ),
-            ),
-            // تعتيم خفيف للبطاقات الجانبية غير النشطة
-            AnimatedOpacity(
-              duration: const Duration(milliseconds: 300),
-              opacity: dimmed ? 0.35 : 0.0,
-              child: Container(color: Colors.black),
-            ),
-            // تدرّج علوي خفيف لإبراز الشارات
-            Positioned(
-              top: 0,
-              left: 0,
-              right: 0,
-              child: Container(
-                height: 60,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      Colors.black.withValues(alpha: 0.45),
-                      Colors.transparent,
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            // تدرّج سفلي + النص
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 0,
-              child: Container(
-                padding: const EdgeInsets.fromLTRB(16, 40, 16, 14),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      Colors.transparent,
-                      Colors.black.withValues(alpha: 0.80),
-                    ],
-                  ),
-                ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text('خلفية جديدة',
-                              style: GoogleFonts.poppins(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 15),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis),
-                          const SizedBox(height: 3),
-                          Row(mainAxisSize: MainAxisSize.min, children: [
-                            const Icon(Icons.hd_rounded,
-                                color: Colors.cyanAccent, size: 14),
-                            const SizedBox(width: 3),
-                            Text('جودة عالية',
-                                style: GoogleFonts.poppins(
-                                    color: Colors.white70, fontSize: 11)),
-                          ]),
-                        ],
-                      ),
-                    ),
-                    Consumer<FavoritesProvider>(
-                      builder: (context, favProvider, _) {
-                        final isFav = favProvider.isFavorite(wallpaper.id);
-                        return GestureDetector(
-                          onTap: () => favProvider.toggle(wallpaper),
-                          child: Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                                color: Colors.black.withValues(alpha: 0.4),
-                                shape: BoxShape.circle,
-                                border: Border.all(
-                                    color:
-                                        Colors.white.withValues(alpha: 0.2))),
-                            child: Icon(
-                              isFav
-                                  ? Icons.favorite_rounded
-                                  : Icons.favorite_border_rounded,
-                              color: isFav ? Colors.redAccent : Colors.white,
-                              size: 18,
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            // شارة 16:9 أعلى اليسار
-            Positioned(
-              top: 10,
-              left: 10,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-                decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                        colors: [Colors.blueAccent, Colors.cyanAccent]),
-                    borderRadius: BorderRadius.circular(20),
-                    boxShadow: [
-                      BoxShadow(
-                          color: Colors.blueAccent.withValues(alpha: 0.5),
-                          blurRadius: 8,
-                          offset: const Offset(0, 2))
+                GestureDetector(
+                  onTap: () => Navigator.push(context,
+                      MaterialPageRoute(builder: (_) => const Screen169())),
+                  child: _glass(
+                    radius: 14,
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      Text('الكل',
+                          style: GoogleFonts.poppins(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 13)),
+                      const SizedBox(width: 3),
+                      const Icon(Icons.arrow_back_ios_rounded,
+                          color: Colors.white, size: 10),
                     ]),
-                child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  const Icon(Icons.crop_landscape_rounded,
-                      color: Colors.white, size: 12),
-                  const SizedBox(width: 4),
-                  Text('16:9',
-                      style: GoogleFonts.poppins(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 11)),
-                ]),
-              ),
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+          // ── جسم السلايدر الزجاجي ──
+          AspectRatio(
+            aspectRatio: 16 / 9,
+            child: Stack(
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(28),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      boxShadow: [
+                        BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.35),
+                            blurRadius: 24,
+                            offset: const Offset(0, 12)),
+                      ],
+                    ),
+                    child: NotificationListener<ScrollNotification>(
+                      onNotification: (notif) {
+                        if (notif is ScrollStartNotification) {
+                          _timer?.cancel();
+                        }
+                        if (notif is ScrollEndNotification) {
+                          _restartAutoSlideDelayed();
+                        }
+                        return false;
+                      },
+                      child: PageView.builder(
+                        controller: _pageController,
+                        itemCount: _wallpapers.length,
+                        onPageChanged: (i) => setState(() => _currentPage = i),
+                        itemBuilder: (context, index) {
+                          final wallpaper = _wallpapers[index];
+                          return GestureDetector(
+                            onTap: () => _openWallpaper(context, index),
+                            child: Hero(
+                              tag: 'slider_thumb_${wallpaper.id}',
+                              child: CachedNetworkImage(
+                                imageUrl: wallpaper.thumbnailUrl.isNotEmpty
+                                    ? wallpaper.thumbnailUrl
+                                    : wallpaper.imageUrl,
+                                fit: BoxFit.cover,
+                                fadeInDuration:
+                                    const Duration(milliseconds: 350),
+                                placeholder: (_, __) =>
+                                    const ShimmerLoadingCard(),
+                                errorWidget: (_, __, ___) =>
+                                    Container(color: Colors.grey[900]),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+                ),
+                // تدرّج خفيف لضمان وضوح العناصر الزجاجية فوق أي صورة
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(28),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              Colors.black.withValues(alpha: 0.28),
+                              Colors.transparent,
+                              Colors.transparent,
+                              Colors.black.withValues(alpha: 0.40),
+                            ],
+                            stops: const [0.0, 0.25, 0.65, 1.0],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                // شارة زجاجية علوية يسار: 16:9
+                Positioned(
+                  top: 12,
+                  left: 12,
+                  child: _glass(
+                    radius: 20,
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      const Icon(Icons.hd_rounded,
+                          color: Colors.cyanAccent, size: 14),
+                      const SizedBox(width: 4),
+                      Text('16:9',
+                          style: GoogleFonts.poppins(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 11)),
+                    ]),
+                  ),
+                ),
+                // شارة زجاجية علوية يمين: عداد الصفحات
+                Positioned(
+                  top: 12,
+                  right: 12,
+                  child: _glass(
+                    radius: 20,
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    child: Text('${_currentPage + 1} / ${_wallpapers.length}',
+                        style: GoogleFonts.poppins(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 11)),
+                  ),
+                ),
+                // الشريط الزجاجي السفلي العائم
+                Positioned(
+                  left: 12,
+                  right: 12,
+                  bottom: 12,
+                  child: _glass(
+                    radius: 20,
+                    blur: 18,
+                    opacity: 0.16,
+                    padding: const EdgeInsets.fromLTRB(14, 10, 10, 10),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text('خلفية بانورامية',
+                                  style: GoogleFonts.poppins(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis),
+                              const SizedBox(height: 2),
+                              Text('اضغط للمعاينة والتحميل',
+                                  style: GoogleFonts.poppins(
+                                      color: Colors.white70, fontSize: 10)),
+                            ],
+                          ),
+                        ),
+                        // مؤشر النقاط الزجاجي
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: List.generate(_wallpapers.length, (i) {
+                            final isActive = _currentPage == i;
+                            return AnimatedContainer(
+                              duration: const Duration(milliseconds: 350),
+                              curve: Curves.easeInOutCubic,
+                              margin:
+                                  const EdgeInsets.symmetric(horizontal: 2.5),
+                              width: isActive ? 16 : 5,
+                              height: 5,
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(3),
+                                color: isActive
+                                    ? Colors.cyanAccent
+                                    : Colors.white.withValues(alpha: 0.4),
+                              ),
+                            );
+                          }),
+                        ),
+                        const SizedBox(width: 8),
+                        Consumer<FavoritesProvider>(
+                          builder: (context, favProvider, _) {
+                            final wallpaper = _wallpapers[_currentPage];
+                            final isFav = favProvider.isFavorite(wallpaper.id);
+                            return GestureDetector(
+                              onTap: () => favProvider.toggle(wallpaper),
+                              child: _glass(
+                                radius: 30,
+                                opacity: 0.20,
+                                padding: const EdgeInsets.all(7),
+                                child: Icon(
+                                  isFav
+                                      ? Icons.favorite_rounded
+                                      : Icons.favorite_border_rounded,
+                                  color:
+                                      isFav ? Colors.redAccent : Colors.white,
+                                  size: 16,
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
