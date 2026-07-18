@@ -23,7 +23,6 @@ dependencies:
   # Images & UI
   cached_network_image: ^3.3.1
   shimmer: ^3.0.0
-  google_fonts: ^6.1.0
 
   # Network
   http: ^1.1.2
@@ -54,4 +53,16 @@ flutter:
   uses-material-design: true
   assets:
     - assets/icon.png
-    
+    - assets/fonts/
+
+  fonts:
+    - family: Poppins
+      fonts:
+        - asset: assets/fonts/Poppins-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/Poppins-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Poppins-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Poppins-Bold.ttf
+          weight: 700

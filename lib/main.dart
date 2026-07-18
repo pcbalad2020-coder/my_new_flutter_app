@@ -4,7 +4,6 @@ import 'dart:ui';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:shimmer/shimmer.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -20,6 +19,58 @@ import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+
+// =============================================================================
+// 🔤 APP FONTS — خط Poppins محلي (Assets) بدل google_fonts
+// =============================================================================
+// يستبدل AppFonts.poppins() بخط Poppins مضمّن داخل التطبيق (assets/fonts).
+// هذا يمنع أي محاولة تحميل خط من الإنترنت، وبالتالي يمنع كراش
+// "Failed host lookup: fonts.gstatic.com" نهائياً حتى بدون اتصال بالإنترنت.
+// تأكد من إضافة الخطوط في pubspec.yaml كما هو موضح في ملاحظات التسليم.
+class AppFonts {
+  static TextStyle poppins({
+    Color? color,
+    Color? backgroundColor,
+    double? fontSize,
+    FontWeight? fontWeight,
+    FontStyle? fontStyle,
+    double? letterSpacing,
+    double? wordSpacing,
+    TextBaseline? textBaseline,
+    double? height,
+    Locale? locale,
+    Paint? foreground,
+    Paint? background,
+    List<Shadow>? shadows,
+    List<FontFeature>? fontFeatures,
+    TextDecoration? decoration,
+    Color? decorationColor,
+    TextDecorationStyle? decorationStyle,
+    double? decorationThickness,
+  }) {
+    return TextStyle(
+      fontFamily: 'Poppins',
+      color: color,
+      backgroundColor: backgroundColor,
+      fontSize: fontSize,
+      fontWeight: fontWeight,
+      fontStyle: fontStyle,
+      letterSpacing: letterSpacing,
+      wordSpacing: wordSpacing,
+      textBaseline: textBaseline,
+      height: height,
+      locale: locale,
+      foreground: foreground,
+      background: background,
+      shadows: shadows,
+      fontFeatures: fontFeatures,
+      decoration: decoration,
+      decorationColor: decorationColor,
+      decorationStyle: decorationStyle,
+      decorationThickness: decorationThickness,
+    );
+  }
+}
 
 // =============================================================================
 // 🔔 NOTIFICATION SERVICE — 1خدمة الإشعارات
@@ -1042,7 +1093,7 @@ class DownloadService {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('❌ يحتاج التطبيق إلى إذن الصور للحفظ',
-                style: GoogleFonts.poppins()),
+                style: AppFonts.poppins()),
             backgroundColor: Colors.orange[800],
             duration: const Duration(seconds: 4),
             action: SnackBarAction(
@@ -1067,7 +1118,7 @@ class DownloadService {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('تم خصم 10 عملات 🪙 | الرصيد: ${coinsProvider.coins}',
-              style: GoogleFonts.poppins()),
+              style: AppFonts.poppins()),
           backgroundColor: Colors.orange[800],
           behavior: SnackBarBehavior.floating,
           shape:
@@ -1176,13 +1227,13 @@ class _DownloadProgressDialogState extends State<_DownloadProgressDialog> {
       backgroundColor: const Color(0xFF1A2533),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       title: Text(_done ? 'تم التحميل!' : (_error ? 'خطأ' : 'جاري التحميل'),
-          style: GoogleFonts.poppins(
+          style: AppFonts.poppins(
               color: Colors.white, fontWeight: FontWeight.bold)),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(widget.wallpaper.title,
-              style: GoogleFonts.poppins(color: Colors.grey[400], fontSize: 12),
+              style: AppFonts.poppins(color: Colors.grey[400], fontSize: 12),
               maxLines: 1,
               overflow: TextOverflow.ellipsis),
           const SizedBox(height: 20),
@@ -1213,7 +1264,7 @@ class _DownloadProgressDialogState extends State<_DownloadProgressDialog> {
                     _done || _error
                         ? _status
                         : '${(_progress * 100).toStringAsFixed(0)}%',
-                    style: GoogleFonts.poppins(
+                    style: AppFonts.poppins(
                         color: _done
                             ? Colors.green
                             : (_error ? Colors.red : Colors.white70),
@@ -1359,7 +1410,7 @@ class PermissionsInitializer {
                       color: Colors.blueAccent, size: 36)),
               const SizedBox(height: 14),
               Text('إذن الصور مطلوب',
-                  style: GoogleFonts.poppins(
+                  style: AppFonts.poppins(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
                       fontSize: 18),
@@ -1367,7 +1418,7 @@ class PermissionsInitializer {
             ]),
             content: Text(
                 'يحتاج التطبيق إلى إذن الوصول للصور لحفظ الخلفيات في معرض جهازك.',
-                style: GoogleFonts.poppins(
+                style: AppFonts.poppins(
                     color: Colors.grey[300], fontSize: 13, height: 1.8),
                 textAlign: TextAlign.center),
             actionsAlignment: MainAxisAlignment.center,
@@ -1379,8 +1430,7 @@ class PermissionsInitializer {
                       onPressed: () => Navigator.pop(context, true),
                       icon: const Icon(Icons.check_circle_outline, size: 18),
                       label: Text('السماح بالوصول للصور',
-                          style:
-                              GoogleFonts.poppins(fontWeight: FontWeight.w700)),
+                          style: AppFonts.poppins(fontWeight: FontWeight.w700)),
                       style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.blueAccent,
                           foregroundColor: Colors.white,
@@ -1398,7 +1448,7 @@ class PermissionsInitializer {
                       icon: const Icon(Icons.settings_outlined,
                           size: 16, color: Colors.grey),
                       label: Text('فتح إعدادات التطبيق',
-                          style: GoogleFonts.poppins(
+                          style: AppFonts.poppins(
                               color: Colors.grey, fontSize: 12)),
                       style: OutlinedButton.styleFrom(
                           side: BorderSide(
@@ -1428,7 +1478,7 @@ void watchAdForCoins(BuildContext context) {
           SnackBar(
             content: Text(
                 '🎉 حصلت على 5 عملات! رصيدك: ${coinsProvider.coins} 🪙',
-                style: GoogleFonts.poppins()),
+                style: AppFonts.poppins()),
             backgroundColor: Colors.green[700],
             behavior: SnackBarBehavior.floating,
             shape:
@@ -1452,18 +1502,18 @@ void showInsufficientCoinsDialog(BuildContext context) {
           const Icon(Icons.monetization_on, color: Colors.amber),
           const SizedBox(width: 8),
           Text('عملات غير كافية',
-              style: GoogleFonts.poppins(
+              style: AppFonts.poppins(
                   color: Colors.white, fontWeight: FontWeight.bold)),
         ],
       ),
       content: Text(
         'تحتاج إلى 10 عملات لتحميل هذه الصورة.\nشاهد إعلاناً لكسب 5 عملات!',
-        style: GoogleFonts.poppins(color: Colors.grey[400]),
+        style: AppFonts.poppins(color: Colors.grey[400]),
       ),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: Text('إلغاء', style: GoogleFonts.poppins(color: Colors.grey)),
+          child: Text('إلغاء', style: AppFonts.poppins(color: Colors.grey)),
         ),
         ElevatedButton.icon(
           onPressed: () {
@@ -1472,7 +1522,7 @@ void showInsufficientCoinsDialog(BuildContext context) {
           },
           icon: const Icon(Icons.play_circle_outline, size: 18),
           label: Text('شاهد إعلاناً (+5 🪙)',
-              style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+              style: AppFonts.poppins(fontWeight: FontWeight.w600)),
           style: ElevatedButton.styleFrom(
             backgroundColor: Colors.amber[700],
             foregroundColor: Colors.white,
@@ -1718,7 +1768,7 @@ class WallpaperCard extends StatelessWidget {
                     left: 8,
                     right: 8,
                     child: Text(wallpaper.title,
-                        style: GoogleFonts.poppins(
+                        style: AppFonts.poppins(
                             color: Colors.white,
                             fontSize: 11,
                             fontWeight: FontWeight.w600),
@@ -1785,7 +1835,7 @@ class WallpaperCard169 extends StatelessWidget {
                   left: 12,
                   right: 12,
                   child: Text(wallpaper.title,
-                      style: GoogleFonts.poppins(
+                      style: AppFonts.poppins(
                           color: Colors.white,
                           fontSize: 13,
                           fontWeight: FontWeight.bold),
@@ -1828,7 +1878,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
                           color: Colors.white, size: 20),
                       onPressed: () => Navigator.pop(context)),
                   Text('سياسة الخصوصية',
-                      style: GoogleFonts.poppins(
+                      style: AppFonts.poppins(
                           fontWeight: FontWeight.bold,
                           color: Colors.white,
                           fontSize: 18))
@@ -1849,7 +1899,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
                               color: Colors.white.withValues(alpha: 0.12))),
                       child: SingleChildScrollView(
                           child: Text(kPrivacyPolicyText,
-                              style: GoogleFonts.poppins(
+                              style: AppFonts.poppins(
                                   color: Colors.white.withValues(alpha: 0.88),
                                   fontSize: 13.5,
                                   height: 1.9),
@@ -1931,12 +1981,12 @@ class _PrivacyPolicyDialogState extends State<PrivacyPolicyDialog> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                       Text('سياسة الخصوصية',
-                          style: GoogleFonts.poppins(
+                          style: AppFonts.poppins(
                               color: Colors.white,
                               fontWeight: FontWeight.bold,
                               fontSize: 17)),
                       Text('يرجى القراءة قبل المتابعة',
-                          style: GoogleFonts.poppins(
+                          style: AppFonts.poppins(
                               color: Colors.grey[400], fontSize: 12))
                     ])),
               ]),
@@ -1950,7 +2000,7 @@ class _PrivacyPolicyDialogState extends State<PrivacyPolicyDialog> {
                   child: SingleChildScrollView(
                       controller: _scrollController,
                       child: Text(kPrivacyPolicyText,
-                          style: GoogleFonts.poppins(
+                          style: AppFonts.poppins(
                               color: Colors.white.withValues(alpha: 0.85),
                               fontSize: 13,
                               height: 1.8),
@@ -1968,7 +2018,7 @@ class _PrivacyPolicyDialogState extends State<PrivacyPolicyDialog> {
                             color: Colors.blueAccent.withValues(alpha: 0.7),
                             size: 18),
                         Text('مرر للأسفل للمتابعة',
-                            style: GoogleFonts.poppins(
+                            style: AppFonts.poppins(
                                 color: Colors.grey[500], fontSize: 11))
                       ])),
             Padding(
@@ -1987,7 +2037,7 @@ class _PrivacyPolicyDialogState extends State<PrivacyPolicyDialog> {
                           borderRadius: BorderRadius.circular(16)),
                       elevation: 0),
                   child: Text('أوافق على سياسة الخصوصية',
-                      style: GoogleFonts.poppins(
+                      style: AppFonts.poppins(
                           color: Colors.white,
                           fontWeight: FontWeight.w600,
                           fontSize: 14)),
@@ -2127,13 +2177,13 @@ class _SplashScreenState extends State<SplashScreen>
                   opacity: _textFadeAnim.value,
                   child: Column(children: [
                     Text('مرحباً 👋',
-                        style: GoogleFonts.poppins(
+                        style: AppFonts.poppins(
                             color: Colors.white,
                             fontSize: 32,
                             fontWeight: FontWeight.bold)),
                     const SizedBox(height: 8),
                     Text('اكتشف أجمل الخلفيات',
-                        style: GoogleFonts.poppins(
+                        style: AppFonts.poppins(
                             color: Colors.white60, fontSize: 16))
                   ])),
             ),
@@ -2289,7 +2339,7 @@ class _PreviewScreenState extends State<PreviewScreen> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                             Text(wallpaper.title,
-                                style: GoogleFonts.poppins(
+                                style: AppFonts.poppins(
                                     color: Colors.white,
                                     fontSize: 16,
                                     fontWeight: FontWeight.bold),
@@ -2297,7 +2347,7 @@ class _PreviewScreenState extends State<PreviewScreen> {
                                 overflow: TextOverflow.ellipsis),
                             Text(
                                 '${wallpaper.category} • ${wallpaper.width}×${wallpaper.height}',
-                                style: GoogleFonts.poppins(
+                                style: AppFonts.poppins(
                                     color: Colors.grey[400], fontSize: 11))
                           ])),
                       Container(
@@ -2310,7 +2360,7 @@ class _PreviewScreenState extends State<PreviewScreen> {
                                   color: Colors.blueAccent
                                       .withValues(alpha: 0.5))),
                           child: Text(wallpaper.isLandscape ? '16:9' : '9:16',
-                              style: GoogleFonts.poppins(
+                              style: AppFonts.poppins(
                                   color: Colors.blueAccent,
                                   fontSize: 11,
                                   fontWeight: FontWeight.w600))),
@@ -2337,7 +2387,7 @@ class _PreviewScreenState extends State<PreviewScreen> {
                 child: Center(
                     child: Text(
                         '${_currentIndex + 1}/${widget.wallpapers.length}',
-                        style: GoogleFonts.poppins(
+                        style: AppFonts.poppins(
                             color: Colors.white,
                             fontSize: 12,
                             fontWeight: FontWeight.w600)))),
@@ -2365,8 +2415,7 @@ class _ActionButton extends StatelessWidget {
       onPressed: onTap,
       icon: Icon(icon, size: 18),
       label: Text(label,
-          style:
-              GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w600)),
+          style: AppFonts.poppins(fontSize: 13, fontWeight: FontWeight.w600)),
       style: ElevatedButton.styleFrom(
           backgroundColor: color,
           foregroundColor: Colors.white,
@@ -2398,7 +2447,7 @@ class CategoryWallpapersScreen extends StatelessWidget {
                   color: Colors.white, size: 20),
               onPressed: () => Navigator.pop(context)),
           title: Text(categoryName,
-              style: GoogleFonts.poppins(
+              style: AppFonts.poppins(
                   fontWeight: FontWeight.bold, color: Colors.white))),
       body:
           _WallpaperGridLoader(categoryName: categoryName, isLandscape: is169),
@@ -2466,12 +2515,12 @@ class _WallpaperGridLoaderState extends State<_WallpaperGridLoader> {
                 Icon(Icons.folder_open, size: 64, color: Colors.grey[600]),
                 const SizedBox(height: 16),
                 Text('لا توجد صور',
-                    style: GoogleFonts.poppins(color: Colors.grey)),
+                    style: AppFonts.poppins(color: Colors.grey)),
                 const SizedBox(height: 16),
                 ElevatedButton.icon(
                     onPressed: _refresh,
                     icon: const Icon(Icons.refresh),
-                    label: Text('إعادة المحاولة', style: GoogleFonts.poppins()),
+                    label: Text('إعادة المحاولة', style: AppFonts.poppins()),
                     style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.blueAccent,
                         shape: RoundedRectangleBorder(
@@ -2570,7 +2619,7 @@ class HomeScreen extends StatelessWidget {
         snap: true,
         backgroundColor: Colors.transparent,
         title: Text('KM2 Wallpapers',
-            style: GoogleFonts.poppins(
+            style: AppFonts.poppins(
                 fontWeight: FontWeight.bold,
                 fontSize: 24,
                 color: Colors.white)),
@@ -2589,7 +2638,7 @@ class HomeScreen extends StatelessWidget {
                     color: Colors.amber, size: 18),
                 const SizedBox(width: 4),
                 Text('${coins.coins}',
-                    style: GoogleFonts.poppins(
+                    style: AppFonts.poppins(
                         color: Colors.amber,
                         fontWeight: FontWeight.bold,
                         fontSize: 14))
@@ -2652,7 +2701,7 @@ class HomeScreen extends StatelessWidget {
                     borderRadius: BorderRadius.circular(2))),
             const SizedBox(width: 10),
             Text(title,
-                style: GoogleFonts.poppins(
+                style: AppFonts.poppins(
                     fontSize: 22,
                     fontWeight: FontWeight.bold,
                     color: Colors.white)),
@@ -2779,7 +2828,7 @@ class HomeScreen extends StatelessWidget {
                     border: Border.all(
                         color: Colors.white.withValues(alpha: 0.25))),
                 child: Text('إعلان',
-                    style: GoogleFonts.poppins(
+                    style: AppFonts.poppins(
                         color: Colors.white,
                         fontSize: 10,
                         fontWeight: FontWeight.w600)),
@@ -2834,13 +2883,13 @@ class HomeScreen extends StatelessWidget {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                 Text(cat.name,
-                                    style: GoogleFonts.poppins(
+                                    style: AppFonts.poppins(
                                         color: Colors.white,
                                         fontWeight: FontWeight.bold,
                                         fontSize: 15)),
                                 if (snapshot.hasData)
                                   Text('${snapshot.data!.length} صورة',
-                                      style: GoogleFonts.poppins(
+                                      style: AppFonts.poppins(
                                           color: Colors.grey[400],
                                           fontSize: 11))
                               ])),
@@ -3015,7 +3064,7 @@ class _TopAutoSlider169State extends State<_TopAutoSlider169> {
                         color: Colors.cyanAccent, size: 16),
                     const SizedBox(width: 8),
                     Text('مختارات 16:9',
-                        style: GoogleFonts.poppins(
+                        style: AppFonts.poppins(
                             fontSize: 15,
                             fontWeight: FontWeight.w600,
                             color: Colors.white)),
@@ -3030,7 +3079,7 @@ class _TopAutoSlider169State extends State<_TopAutoSlider169> {
                         const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
                     child: Row(mainAxisSize: MainAxisSize.min, children: [
                       Text('الكل',
-                          style: GoogleFonts.poppins(
+                          style: AppFonts.poppins(
                               color: Colors.white,
                               fontWeight: FontWeight.w600,
                               fontSize: 13)),
@@ -3098,7 +3147,7 @@ class _TopAutoSlider169State extends State<_TopAutoSlider169> {
                     ),
                   ),
                 ),
-                // تدرّج خفيف لضمان وضوح العناصر الزجاجية فوق أي صورة
+                // تدرّج خفيف جداً في الحواف فقط (لا يغطي مركز الصورة إطلاقاً)
                 Positioned.fill(
                   child: IgnorePointer(
                     child: ClipRRect(
@@ -3109,12 +3158,12 @@ class _TopAutoSlider169State extends State<_TopAutoSlider169> {
                             begin: Alignment.topCenter,
                             end: Alignment.bottomCenter,
                             colors: [
-                              Colors.black.withValues(alpha: 0.28),
+                              Colors.black.withValues(alpha: 0.22),
                               Colors.transparent,
                               Colors.transparent,
-                              Colors.black.withValues(alpha: 0.40),
+                              Colors.black.withValues(alpha: 0.18),
                             ],
-                            stops: const [0.0, 0.25, 0.65, 1.0],
+                            stops: const [0.0, 0.14, 0.86, 1.0],
                           ),
                         ),
                       ),
@@ -3134,7 +3183,7 @@ class _TopAutoSlider169State extends State<_TopAutoSlider169> {
                           color: Colors.cyanAccent, size: 14),
                       const SizedBox(width: 4),
                       Text('16:9',
-                          style: GoogleFonts.poppins(
+                          style: AppFonts.poppins(
                               color: Colors.white,
                               fontWeight: FontWeight.bold,
                               fontSize: 11)),
@@ -3150,90 +3199,72 @@ class _TopAutoSlider169State extends State<_TopAutoSlider169> {
                     padding:
                         const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                     child: Text('${_currentPage + 1} / ${_wallpapers.length}',
-                        style: GoogleFonts.poppins(
+                        style: AppFonts.poppins(
                             color: Colors.white,
                             fontWeight: FontWeight.w600,
                             fontSize: 11)),
                   ),
                 ),
-                // الشريط الزجاجي السفلي العائم
+                // زر مفضلة زجاجي صغير أسفل اليمين (لا يغطي إلا زاوية صغيرة)
                 Positioned(
-                  left: 12,
-                  right: 12,
                   bottom: 12,
-                  child: _glass(
-                    radius: 20,
-                    blur: 18,
-                    opacity: 0.16,
-                    padding: const EdgeInsets.fromLTRB(14, 10, 10, 10),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text('خلفية بانورامية',
-                                  style: GoogleFonts.poppins(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 14),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis),
-                              const SizedBox(height: 2),
-                              Text('اضغط للمعاينة والتحميل',
-                                  style: GoogleFonts.poppins(
-                                      color: Colors.white70, fontSize: 10)),
-                            ],
+                  right: 12,
+                  child: Consumer<FavoritesProvider>(
+                    builder: (context, favProvider, _) {
+                      final wallpaper = _wallpapers[_currentPage];
+                      final isFav = favProvider.isFavorite(wallpaper.id);
+                      return GestureDetector(
+                        onTap: () => favProvider.toggle(wallpaper),
+                        child: _glass(
+                          radius: 30,
+                          opacity: 0.20,
+                          padding: const EdgeInsets.all(8),
+                          child: Icon(
+                            isFav
+                                ? Icons.favorite_rounded
+                                : Icons.favorite_border_rounded,
+                            color: isFav ? Colors.redAccent : Colors.white,
+                            size: 17,
                           ),
                         ),
-                        // مؤشر النقاط الزجاجي
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: List.generate(_wallpapers.length, (i) {
-                            final isActive = _currentPage == i;
-                            return AnimatedContainer(
-                              duration: const Duration(milliseconds: 350),
-                              curve: Curves.easeInOutCubic,
-                              margin:
-                                  const EdgeInsets.symmetric(horizontal: 2.5),
-                              width: isActive ? 16 : 5,
-                              height: 5,
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(3),
-                                color: isActive
-                                    ? Colors.cyanAccent
-                                    : Colors.white.withValues(alpha: 0.4),
-                              ),
-                            );
-                          }),
-                        ),
-                        const SizedBox(width: 8),
-                        Consumer<FavoritesProvider>(
-                          builder: (context, favProvider, _) {
-                            final wallpaper = _wallpapers[_currentPage];
-                            final isFav = favProvider.isFavorite(wallpaper.id);
-                            return GestureDetector(
-                              onTap: () => favProvider.toggle(wallpaper),
-                              child: _glass(
-                                radius: 30,
-                                opacity: 0.20,
-                                padding: const EdgeInsets.all(7),
-                                child: Icon(
-                                  isFav
-                                      ? Icons.favorite_rounded
-                                      : Icons.favorite_border_rounded,
-                                  color:
-                                      isFav ? Colors.redAccent : Colors.white,
-                                  size: 16,
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                      ],
-                    ),
+                      );
+                    },
                   ),
+                ),
+              ],
+            ),
+          ),
+          // ── معلومات + مؤشر الصفحات أسفل الصورة (خارج الإطار تماماً) ──
+          Padding(
+            padding: const EdgeInsets.only(top: 10),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Flexible(
+                  child: Text('اسحب لاستعراض المزيد من الخلفيات',
+                      style:
+                          AppFonts.poppins(color: Colors.white60, fontSize: 11),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis),
+                ),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: List.generate(_wallpapers.length, (i) {
+                    final isActive = _currentPage == i;
+                    return AnimatedContainer(
+                      duration: const Duration(milliseconds: 350),
+                      curve: Curves.easeInOutCubic,
+                      margin: const EdgeInsets.symmetric(horizontal: 2.5),
+                      width: isActive ? 18 : 6,
+                      height: 6,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(3),
+                        color: isActive
+                            ? Colors.cyanAccent
+                            : Colors.white.withValues(alpha: 0.25),
+                      ),
+                    );
+                  }),
                 ),
               ],
             ),
@@ -3256,7 +3287,7 @@ class NewScreen extends StatelessWidget {
           backgroundColor: Colors.transparent,
           elevation: 0,
           title: Text('New',
-              style: GoogleFonts.poppins(
+              style: AppFonts.poppins(
                   fontWeight: FontWeight.bold,
                   fontSize: 24,
                   color: Colors.white))),
@@ -3272,7 +3303,7 @@ class BestScreen extends StatelessWidget {
           backgroundColor: Colors.transparent,
           elevation: 0,
           title: Text('Best',
-              style: GoogleFonts.poppins(
+              style: AppFonts.poppins(
                   fontWeight: FontWeight.bold,
                   fontSize: 24,
                   color: Colors.white))),
@@ -3289,7 +3320,7 @@ class Screen169 extends StatelessWidget {
           elevation: 0,
           title: Row(children: [
             Text('16:9 ',
-                style: GoogleFonts.poppins(
+                style: AppFonts.poppins(
                     fontWeight: FontWeight.bold,
                     fontSize: 24,
                     color: Colors.white)),
@@ -3301,7 +3332,7 @@ class Screen169 extends StatelessWidget {
                     border:
                         Border.all(color: Colors.cyan.withValues(alpha: 0.5))),
                 child: Text('Landscape',
-                    style: GoogleFonts.poppins(
+                    style: AppFonts.poppins(
                         fontSize: 11,
                         color: Colors.cyan,
                         fontWeight: FontWeight.w600)))
@@ -3321,7 +3352,7 @@ class FavoritesScreen extends StatelessWidget {
               floating: true,
               backgroundColor: Colors.transparent,
               title: Text('Favorites',
-                  style: GoogleFonts.poppins(
+                  style: AppFonts.poppins(
                       fontWeight: FontWeight.bold,
                       fontSize: 24,
                       color: Colors.white)),
@@ -3342,11 +3373,11 @@ class FavoritesScreen extends StatelessWidget {
                       size: 80, color: Colors.grey[600]),
                   const SizedBox(height: 20),
                   Text('لا توجد مفضلات بعد',
-                      style: GoogleFonts.poppins(
+                      style: AppFonts.poppins(
                           color: Colors.grey[400], fontSize: 18)),
                   const SizedBox(height: 8),
                   Text('اضغط ♥ على أي صورة لحفظها هنا',
-                      style: GoogleFonts.poppins(
+                      style: AppFonts.poppins(
                           color: Colors.grey[600], fontSize: 13))
                 ])))
           else
@@ -3385,22 +3416,22 @@ class FavoritesScreen extends StatelessWidget {
       builder: (_) => AlertDialog(
         backgroundColor: const Color(0xFF1A2533),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text('مسح المفضلة',
-            style: GoogleFonts.poppins(color: Colors.white)),
+        title:
+            Text('مسح المفضلة', style: AppFonts.poppins(color: Colors.white)),
         content: Text('هل تريد حذف كل المفضلات؟',
-            style: GoogleFonts.poppins(color: Colors.grey[400])),
+            style: AppFonts.poppins(color: Colors.grey[400])),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(context),
               child: Text('إلغاء',
-                  style: GoogleFonts.poppins(color: Colors.grey[600]))),
+                  style: AppFonts.poppins(color: Colors.grey[600]))),
           TextButton(
               onPressed: () async {
                 Navigator.pop(context);
                 await provider.clearAll();
               },
-              child: Text('مسح الكل',
-                  style: GoogleFonts.poppins(color: Colors.red)))
+              child:
+                  Text('مسح الكل', style: AppFonts.poppins(color: Colors.red)))
         ],
       ),
     );
@@ -3416,7 +3447,7 @@ class CatalogScreen extends StatelessWidget {
           floating: true,
           backgroundColor: Colors.transparent,
           title: Text('Catalog',
-              style: GoogleFonts.poppins(
+              style: AppFonts.poppins(
                   fontWeight: FontWeight.bold,
                   fontSize: 24,
                   color: Colors.white))),
@@ -3481,7 +3512,7 @@ class CatalogScreen extends StatelessWidget {
                                   const SizedBox(width: 6),
                                   Expanded(
                                       child: Text(cat.name,
-                                          style: GoogleFonts.poppins(
+                                          style: AppFonts.poppins(
                                               color: Colors.white,
                                               fontWeight: FontWeight.bold,
                                               fontSize: 14),
@@ -3489,7 +3520,7 @@ class CatalogScreen extends StatelessWidget {
                                 ]),
                                 if (snapshot.hasData)
                                   Text('${snapshot.data!.length} صورة',
-                                      style: GoogleFonts.poppins(
+                                      style: AppFonts.poppins(
                                           color: Colors.grey[400],
                                           fontSize: 11))
                               ])),
@@ -3523,7 +3554,7 @@ class SettingsScreen extends StatelessWidget {
                   color: Colors.white, size: 20),
               onPressed: () => Navigator.pop(context)),
           title: Text('الإعدادات',
-              style: GoogleFonts.poppins(
+              style: AppFonts.poppins(
                   fontWeight: FontWeight.bold, color: Colors.white))),
       body: ListView(padding: const EdgeInsets.all(16), children: [
         const Center(child: BannerAdWidget()),
@@ -3550,12 +3581,12 @@ class SettingsScreen extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                     Text('اربح العملات',
-                        style: GoogleFonts.poppins(
+                        style: AppFonts.poppins(
                             color: Colors.white,
                             fontWeight: FontWeight.w600,
                             fontSize: 14)),
                     Text('شاهد إعلاناً لكسب 5 عملات 🪙',
-                        style: GoogleFonts.poppins(
+                        style: AppFonts.poppins(
                             color: Colors.grey[400], fontSize: 12))
                   ])),
             ]),
@@ -3563,10 +3594,10 @@ class SettingsScreen extends StatelessWidget {
             Consumer<CoinsProvider>(
               builder: (context, coins, _) => Row(children: [
                 Text('رصيدك الحالي: ',
-                    style: GoogleFonts.poppins(
+                    style: AppFonts.poppins(
                         color: Colors.grey[300], fontSize: 13)),
                 Text('${coins.coins} 🪙',
-                    style: GoogleFonts.poppins(
+                    style: AppFonts.poppins(
                         color: Colors.amber,
                         fontSize: 16,
                         fontWeight: FontWeight.bold))
@@ -3579,7 +3610,7 @@ class SettingsScreen extends StatelessWidget {
                 onPressed: () => watchAdForCoins(context),
                 icon: const Icon(Icons.play_circle_outline, size: 18),
                 label: Text('شاهد إعلاناً (+5 🪙)',
-                    style: GoogleFonts.poppins(
+                    style: AppFonts.poppins(
                         fontSize: 13, fontWeight: FontWeight.w600)),
                 style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.amber[700],
@@ -3600,7 +3631,7 @@ class SettingsScreen extends StatelessWidget {
             onTap: () {
               GitHubService.clearCache();
               ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                  content: Text('تم مسح الكاش ✅', style: GoogleFonts.poppins()),
+                  content: Text('تم مسح الكاش ✅', style: AppFonts.poppins()),
                   behavior: SnackBarBehavior.floating,
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12)),
@@ -3615,13 +3646,13 @@ class SettingsScreen extends StatelessWidget {
             onTap: () async {
               ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                   content:
-                      Text('⏳ جاري الاختبار...', style: GoogleFonts.poppins()),
+                      Text('⏳ جاري الاختبار...', style: AppFonts.poppins()),
                   behavior: SnackBarBehavior.floating));
               final ok = await GitHubService.testConnection();
               if (context.mounted)
                 ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                     content: Text(ok ? '✅ الاتصال ناجح' : '❌ فشل الاتصال',
-                        style: GoogleFonts.poppins()),
+                        style: AppFonts.poppins()),
                     behavior: SnackBarBehavior.floating,
                     backgroundColor: ok ? Colors.green[700] : Colors.red[700],
                     shape: RoundedRectangleBorder(
@@ -3659,8 +3690,8 @@ class SettingsScreen extends StatelessWidget {
               if (context.mounted) {
                 if (isGranted) {
                   ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                      content: Text('✅ الأذونات ممنوحة',
-                          style: GoogleFonts.poppins()),
+                      content:
+                          Text('✅ الأذونات ممنوحة', style: AppFonts.poppins()),
                       backgroundColor: Colors.green[700],
                       behavior: SnackBarBehavior.floating,
                       shape: RoundedRectangleBorder(
@@ -3694,7 +3725,7 @@ class SettingsScreen extends StatelessWidget {
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(20)),
                   title: Text('4K خلفيات',
-                      style: GoogleFonts.poppins(
+                      style: AppFonts.poppins(
                           color: Colors.white, fontWeight: FontWeight.bold),
                       textAlign: TextAlign.center),
                   content: Column(mainAxisSize: MainAxisSize.min, children: [
@@ -3718,23 +3749,22 @@ class SettingsScreen extends StatelessWidget {
                                         color: Colors.white, size: 40))))),
                     const SizedBox(height: 16),
                     Text('الإصدار 1.2',
-                        style: GoogleFonts.poppins(
+                        style: AppFonts.poppins(
                             color: Colors.grey[400], fontSize: 13)),
                     const SizedBox(height: 4),
                     Text('تطبيق خلفيات عالي الجودة',
-                        style: GoogleFonts.poppins(
+                        style: AppFonts.poppins(
                             color: Colors.white70, fontSize: 13)),
                     const SizedBox(height: 4),
                     Text('KASEM 2026',
-                        style: GoogleFonts.poppins(
+                        style: AppFonts.poppins(
                             color: Colors.grey[500], fontSize: 12))
                   ]),
                   actions: [
                     TextButton(
                         onPressed: () => Navigator.pop(context),
                         child: Text('إغلاق',
-                            style:
-                                GoogleFonts.poppins(color: Colors.blueAccent)))
+                            style: AppFonts.poppins(color: Colors.blueAccent)))
                   ],
                 ),
               );
@@ -3787,12 +3817,12 @@ class _SettingsTile extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                     Text(title,
-                        style: GoogleFonts.poppins(
+                        style: AppFonts.poppins(
                             color: Colors.white,
                             fontWeight: FontWeight.w600,
                             fontSize: 14)),
                     Text(subtitle,
-                        style: GoogleFonts.poppins(
+                        style: AppFonts.poppins(
                             color: Colors.grey[400], fontSize: 12))
                   ])),
               if (trailing != null) ...[trailing!, const SizedBox(width: 6)],
@@ -3935,7 +3965,7 @@ class _NavItem extends StatelessWidget {
               color: isSelected ? Colors.blueAccent : Colors.grey, size: 22),
           const SizedBox(height: 3),
           Text(label,
-              style: GoogleFonts.poppins(
+              style: AppFonts.poppins(
                   fontSize: 9,
                   color: isSelected ? Colors.blueAccent : Colors.grey,
                   fontWeight: isSelected ? FontWeight.w700 : FontWeight.normal))
@@ -4052,6 +4082,22 @@ class WallpaperApp extends StatelessWidget {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // ✅ إصلاح الكراش الرئيسي: تم استبدال GoogleFonts.poppins() بخط Poppins
+  // محلي (assets/fonts) عبر AppFonts.poppins()، لذلك لم يعد التطبيق يحاول
+  // تحميل أي خط من الإنترنت إطلاقاً - وهذا يمنع نهائياً كراش
+  // "Failed host lookup: 'fonts.gstatic.com'" حتى بدون اتصال بالإنترنت.
+
+  // ✅ حماية إضافية: التقاط أي استثناءات غير متوقعة على مستوى إطار العمل
+  // بدل ترك التطبيق يتحطم بصمت.
+  FlutterError.onError = (FlutterErrorDetails details) {
+    FlutterError.presentError(details);
+    AppLogger.error('❌ FlutterError: ${details.exceptionAsString()}');
+  };
+  PlatformDispatcher.instance.onError = (error, stack) {
+    AppLogger.error('❌ Uncaught PlatformDispatcher error: $error');
+    return true; // امتصاص الخطأ بدل تحطم التطبيق
+  };
 
   // ✅ Firebase مُعطّل تماماً على iOS لهذه النسخة (خطوة تشخيصية) - يعمل على أندرويد فقط
   if (Platform.isAndroid) {
