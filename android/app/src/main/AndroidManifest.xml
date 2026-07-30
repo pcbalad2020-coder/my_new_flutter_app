@@ -3,16 +3,24 @@
 
     <uses-permission android:name="com.google.android.gms.permission.AD_ID"/>
 
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
+    <!-- أذونات الصور والتخزين -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
 
     <!-- ✅ التصحيح الأساسي: بدون هذه الصلاحية، أي إشعار على Android 13+ (API 33+)
+
          يُحجب بصمت من نظام التشغيل، حتى لو نجح Firebase في استقبال الرسالة فعلياً -->
+
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
-    <application
+        <application
         android:label="4K خلفيات"
         android:name="${applicationName}"
-        android:icon="@mipmap/launcher_icon">
+        android:icon="@mipmap/launcher_icon"
+        android:requestLegacyExternalStorage="true">
+
 
         <meta-data
             android:name="com.google.android.gms.ads.APPLICATION_ID"

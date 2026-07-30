@@ -345,6 +345,8 @@ class AppLogger {
 // 🔐 GALLERY PERMISSION HELPER — منطق موحّد لإذن حفظ الصور
 // =============================================================================
 
+enum GalleryPermissionResult { granted, denied, permanentlyDenied }
+
 class GalleryPermission {
   static Future<bool> isGranted() async {
     if (Platform.isIOS) {
@@ -362,22 +364,46 @@ class GalleryPermission {
     return (await Permission.storage.status).isGranted;
   }
 
-  /// يطلب الإذن إذا كان مطلوباً، ويرجع true عند النجاح (أو عدم الحاجة لإذن).
-  static Future<bool> request() async {
+  /// ✅ يطلب الإذن بجولة واحدة فقط على القناة الأصلية (native channel)، ويستخدم
+  /// نتيجة نفس الاستدعاء مباشرة بدل قراءة `.status` مرة أخرى بعدها. القراءة
+  /// المنفصلة بعد `.request()` كانت أحياناً ترجع حالة قديمة (race condition)
+  /// فيظن الكود أن الإذن "مرفوض دائماً" رغم أن المستخدم وافق للتو، فيحوّله
+  /// خطأً إلى صفحة الإعدادات. هذا هو المصدر الوحيد المعتمد للقرار الآن.
+  static Future<GalleryPermissionResult> requestOnce() async {
     if (Platform.isIOS) {
       final status = await Permission.photos.request();
-      return status.isGranted || status.isLimited;
+      if (status.isGranted || status.isLimited) {
+        return GalleryPermissionResult.granted;
+      }
+      return status.isPermanentlyDenied
+          ? GalleryPermissionResult.permanentlyDenied
+          : GalleryPermissionResult.denied;
     }
     final sdkInt = await _androidSdkInt();
-    if (sdkInt >= 33) {
-      final status = await Permission.photos.request();
-      return status.isGranted;
+    if (sdkInt >= 29 && sdkInt < 33) {
+      // Scoped Storage: لا حاجة لإذن لحفظ ملف جديد ينشئه التطبيق.
+      return GalleryPermissionResult.granted;
     }
-    if (sdkInt >= 29) {
-      return true;
+    final permission = sdkInt >= 33 ? Permission.photos : Permission.storage;
+
+    // إذا كان مرفوضاً بشكل دائم مسبقاً، طلبه مجدداً لن يُظهر أي حوار أصلاً
+    // (سلوك أندرويد القياسي)، فنوجّه المستخدم للإعدادات مباشرة بدل تكرار
+    // محاولة لا فائدة منها تبدو للمستخدم وكأنها "حوار ثانٍ صامت".
+    if (await permission.status.isPermanentlyDenied) {
+      return GalleryPermissionResult.permanentlyDenied;
     }
-    final status = await Permission.storage.request();
-    return status.isGranted;
+
+    final status = await permission.request();
+    if (status.isGranted) return GalleryPermissionResult.granted;
+    return status.isPermanentlyDenied
+        ? GalleryPermissionResult.permanentlyDenied
+        : GalleryPermissionResult.denied;
+  }
+
+  /// نسخة قديمة تُبقي التوافق مع أي كود آخر يستدعيها (ترجع true/false فقط).
+  static Future<bool> request() async {
+    final result = await requestOnce();
+    return result == GalleryPermissionResult.granted;
   }
 
   static Future<bool> isPermanentlyDenied() async {
@@ -845,7 +871,10 @@ class GitHubService {
 
   static final Map<String, List<WallpaperModel>> _cache = {};
   static final Map<String, DateTime> _cacheTimestamps = {};
-  static const Duration _cacheDuration = Duration(hours: 2);
+  // ✅ رفعنا مدة الكاش من ساعتين إلى 6 ساعات لتقليل عدد الطلبات لأي مصدر
+  // (يقلل احتمال الاصطدام بأي حد استخدام مستقبلاً بدون أي أثر ملحوظ على
+  // حداثة المحتوى، لأن الصور لا تتغيّر كل دقيقة).
+  static const Duration _cacheDuration = Duration(hours: 6);
 
   // ✅ مهلات أطول لتحمّل الشبكات البطيئة/غير المستقرة
   static final Dio _dio = Dio(BaseOptions(
@@ -859,11 +888,32 @@ class GitHubService {
     },
   ));
 
+  // ✅ عميل منفصل خاص بـ jsDelivr Data API — هذا هو المصدر الأساسي الجديد
+  // لقائمة الملفات. سبب المشكلة في اللوج (403 من api.github.com) هو أن
+  // GitHub REST API يسمح فقط بـ 60 طلب/ساعة لكل عنوان IP عند عدم استخدام
+  // توكن مصادقة (وهذا التطبيق لا يحمل توكن افتراضياً). بما أن كل فئة
+  // (Sport, Nature, Space...) وكل شاشة تفتح تطلب من api.github.com، هذا الحد
+  // ينتهي بسرعة خصوصاً لو عدة مستخدمين خلف نفس عنوان IP (شبكة جوال/واي فاي
+  // مشتركة). jsDelivr يقدّم نفس البيانات (قائمة الملفات) عبر خدمته المجانية
+  // كـ CDN بحدود استخدام أعلى بكثير ولا يتطلب أي مصادقة إطلاقاً.
+  static final Dio _jsDelivrDio = Dio(BaseOptions(
+    baseUrl: 'https://data.jsdelivr.com',
+    connectTimeout: const Duration(seconds: 30),
+    receiveTimeout: const Duration(seconds: 45),
+    headers: {
+      'Accept': 'application/json',
+      'User-Agent': 'KM2-Wallpaper-App/1.2.0',
+    },
+  ));
+
   /// ✅ يحوّل مسار ملف داخل مستودع GitHub إلى رابط jsDelivr CDN.
   /// jsDelivr يخدم أي ملف عام على GitHub عبر شبكة توزيع عالمية،
   /// وهذا يحل مشاكل عدم ظهور الصور على أجهزة/شبكات معينة بسبب:
   /// - Rate limiting الخاص بـ raw.githubusercontent.com / api.github.com
   /// - حجب أو بطء الوصول لنطاقات GitHub في بعض الدول/الشبكات
+  /// ⚠️ ملاحظة مهمة: jsDelivr يرفض التعامل نهائياً (403) مع أي مستودع
+  /// يتجاوز حجمه الإجمالي 50 ميجابايت — هذا حد ثابت من jsDelivr نفسه ولا
+  /// يمكن رفعه. لهذا نستخدم _toRawGithub كخطة بديلة للمستودعات الكبيرة.
   static String _toJsDelivr({
     required String owner,
     required String repo,
@@ -875,7 +925,56 @@ class GitHubService {
     return 'https://cdn.jsdelivr.net/gh/$owner/$repo@$branch/$encodedPath';
   }
 
-  /// ✅ المصدر الأساسي الجديد لقائمة الملفات: Git Trees API (طلب واحد فقط،
+  /// ✅ رابط بديل مباشر من GitHub نفسه (raw.githubusercontent.com) — لا يوجد
+  /// عليه حد الـ50 ميجابايت الإجمالي الخاص بـ jsDelivr، لذا نستخدمه تحديداً
+  /// للمستودعات الكبيرة (مثل All-images و imag-16-9) التي يرفضها jsDelivr.
+  static String _toRawGithub({
+    required String owner,
+    required String repo,
+    required String branch,
+    required String path,
+  }) {
+    final encodedPath = path.split('/').map(Uri.encodeComponent).join('/');
+    return 'https://raw.githubusercontent.com/$owner/$repo/$branch/$encodedPath';
+  }
+
+  /// ✅ المصدر الأساسي الجديد لقائمة الملفات — jsDelivr Data API (طلب واحد
+  /// فقط، بدون أي مصادقة، وبدون الاصطدام بحد الـ60 طلب/ساعة الخاص بـ GitHub).
+  static Future<List<Map<String, dynamic>>> _fetchViaJsDelivr(
+      String repoName) async {
+    final response = await _jsDelivrDio.get(
+      '/v1/packages/gh/$_owner/$repoName@$_branch',
+      queryParameters: {'structure': 'flat'},
+    );
+    if (response.statusCode == 200 && response.data != null) {
+      final files = response.data['files'] as List? ?? [];
+      return files.where((f) {
+        final name = (f['name'] as String).toLowerCase();
+        return name.endsWith('.jpg') ||
+            name.endsWith('.jpeg') ||
+            name.endsWith('.png') ||
+            name.endsWith('.webp');
+      }).map((f) {
+        // jsDelivr يرجع المسار ببادئة "/" مثل "/folder/file.jpg"
+        var path = f['name'] as String;
+        if (path.startsWith('/')) path = path.substring(1);
+        final filename = path.split('/').last;
+        return {
+          'name': filename,
+          'download_url': _toJsDelivr(
+            owner: _owner,
+            repo: repoName,
+            branch: _branch,
+            path: path,
+          ),
+          'type': 'file',
+        };
+      }).toList();
+    }
+    return [];
+  }
+
+  /// ✅ المصدر الثاني (احتياطي) لقائمة الملفات: Git Trees API (طلب واحد فقط،
   /// حتى لو كان هناك مئات الملفات) — بدل Contents API الذي كان يُستخدم أولاً.
   static Future<List<Map<String, dynamic>>> _fetchViaTrees(
       String repoName) async {
@@ -897,8 +996,10 @@ class GitHubService {
         final filename = path.split('/').last;
         return {
           'name': filename,
-          // ✅ استخدام jsDelivr بدل raw.githubusercontent.com
-          'download_url': _toJsDelivr(
+          // ✅ نصل هنا فقط إذا فشل jsDelivr مسبقاً لهذا المستودع (غالباً
+          // لأنه أكبر من حد الـ50MB الخاص به) — لذلك نستخدم الرابط الخام
+          // المباشر من GitHub بدل jsDelivr مرة أخرى (سيفشل أيضاً بنفس السبب).
+          'download_url': _toRawGithub(
             owner: _owner,
             repo: repoName,
             branch: _branch,
@@ -912,8 +1013,9 @@ class GitHubService {
   }
 
   /// خطة بديلة (fallback) فقط إذا فشل Trees API — تستخدم Contents API،
-  /// لكن روابط الصور الناتجة منها تُحوَّل أيضاً إلى jsDelivr بدل الرابط
-  /// الخام المباشر من GitHub.
+  /// وروابط الصور الناتجة منها تُبنى من raw.githubusercontent.com مباشرة
+  /// (لا jsDelivr، لأن الوصول لهذه الخطة يعني أن jsDelivr فشل أصلاً لهذا
+  /// المستودع — غالباً بسبب تجاوزه حد الـ50MB الخاص بـ jsDelivr).
   static Future<List<Map<String, dynamic>>> _fetchFromRepoContents(
       String repoName) async {
     final response = await _dio.get(
@@ -932,8 +1034,7 @@ class GitHubService {
         final name = item['name'] as String;
         return {
           'name': name,
-          // ✅ نفس التحويل إلى jsDelivr هنا أيضاً
-          'download_url': _toJsDelivr(
+          'download_url': _toRawGithub(
             owner: _owner,
             repo: repoName,
             branch: _branch,
@@ -946,12 +1047,25 @@ class GitHubService {
     return [];
   }
 
-  /// ✅ نقطة الدخول الموحّدة لجلب الملفات: تجرب Trees API أولاً (طلب واحد
-  /// وأكثر كفاءة)، وإذا فشل لأي سبب تنتقل تلقائياً لـ Contents API،
-  /// مع تسجيل مفصّل لنوع الخطأ لتسهيل التشخيص عبر تقارير المستخدمين.
+  /// ✅ نقطة الدخول الموحّدة لجلب الملفات: تجرب jsDelivr أولاً (لا حد استخدام
+  /// عملياً ولا مصادقة مطلوبة)، وإذا فشل لأي سبب تنتقل لـ GitHub Trees API
+  /// ثم Contents API كخطط احتياطية، مع تسجيل مفصّل لنوع الخطأ لتسهيل
+  /// التشخيص عبر تقارير المستخدمين.
   static Future<List<Map<String, dynamic>>> _fetchFiles(String repoName) async {
     try {
-      AppLogger.info('📥 Fetching (trees): $repoName');
+      AppLogger.info('📥 Fetching (jsDelivr): $repoName');
+      final files = await _fetchViaJsDelivr(repoName);
+      if (files.isNotEmpty) return files;
+      AppLogger.warning(
+          '⚠️ jsDelivr returned empty for $repoName, trying GitHub trees API');
+    } on DioException catch (e) {
+      AppLogger.warning(
+          '⚠️ jsDelivr failed for $repoName | type=${e.type} | status=${e.response?.statusCode} | msg=${e.message}');
+    } catch (e) {
+      AppLogger.warning('⚠️ jsDelivr unexpected error for $repoName: $e');
+    }
+
+    try {
       final files = await _fetchViaTrees(repoName);
       if (files.isNotEmpty) return files;
       AppLogger.warning(
@@ -1138,9 +1252,14 @@ class DownloadService {
   }
 
   static Future<bool> _requestStoragePermission(BuildContext context) async {
-    final granted = await GalleryPermission.request();
-    if (granted) return true;
-    if (await GalleryPermission.isPermanentlyDenied() && context.mounted) {
+    // ✅ إذا كان الإذن ممنوحاً مسبقاً، لا داعي لأي حوار إطلاقاً.
+    if (await GalleryPermission.isGranted()) return true;
+
+    final result = await GalleryPermission.requestOnce();
+    if (result == GalleryPermissionResult.granted) return true;
+
+    if (result == GalleryPermissionResult.permanentlyDenied &&
+        context.mounted) {
       openAppSettings();
     }
     return false;
@@ -1358,110 +1477,6 @@ class PrivacyProvider with ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('privacy_accepted', true);
     notifyListeners();
-  }
-}
-
-class PermissionsInitializer {
-  static Future<void> requestOnFirstLaunch(BuildContext context) async {
-    final prefs = await SharedPreferences.getInstance();
-    final alreadyGranted = prefs.getBool('permissions_granted') ?? false;
-    if (alreadyGranted) return;
-    await _requestUntilGranted(context);
-  }
-
-  static Future<void> _requestUntilGranted(BuildContext context) async {
-    int attempts = 0;
-    const int maxAttempts = 3;
-    while (attempts < maxAttempts) {
-      final granted = await GalleryPermission.request();
-      if (granted) {
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setBool('permissions_granted', true);
-        return;
-      }
-      attempts++;
-      if (!context.mounted) return;
-
-      if (await GalleryPermission.isPermanentlyDenied()) {
-        openAppSettings();
-        return;
-      }
-
-      if (attempts >= maxAttempts) {
-        openAppSettings();
-        return;
-      }
-      final retry = await showDialog<bool>(
-        context: context,
-        barrierDismissible: false,
-        builder: (_) => PopScope(
-          canPop: false,
-          child: AlertDialog(
-            backgroundColor: const Color(0xFF1A2533),
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-            title: Column(children: [
-              Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                      color: Colors.blueAccent.withValues(alpha: 0.15),
-                      shape: BoxShape.circle),
-                  child: const Icon(Icons.photo_library_rounded,
-                      color: Colors.blueAccent, size: 36)),
-              const SizedBox(height: 14),
-              Text('إذن الصور مطلوب',
-                  style: AppFonts.poppins(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 18),
-                  textAlign: TextAlign.center),
-            ]),
-            content: Text(
-                'يحتاج التطبيق إلى إذن الوصول للصور لحفظ الخلفيات في معرض جهازك.',
-                style: AppFonts.poppins(
-                    color: Colors.grey[300], fontSize: 13, height: 1.8),
-                textAlign: TextAlign.center),
-            actionsAlignment: MainAxisAlignment.center,
-            actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            actions: [
-              SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                      onPressed: () => Navigator.pop(context, true),
-                      icon: const Icon(Icons.check_circle_outline, size: 18),
-                      label: Text('السماح بالوصول للصور',
-                          style: AppFonts.poppins(fontWeight: FontWeight.w700)),
-                      style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.blueAccent,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(14))))),
-              const SizedBox(height: 8),
-              SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                      onPressed: () {
-                        openAppSettings();
-                        Navigator.pop(context, false);
-                      },
-                      icon: const Icon(Icons.settings_outlined,
-                          size: 16, color: Colors.grey),
-                      label: Text('فتح إعدادات التطبيق',
-                          style: AppFonts.poppins(
-                              color: Colors.grey, fontSize: 12)),
-                      style: OutlinedButton.styleFrom(
-                          side: BorderSide(
-                              color: Colors.grey.withValues(alpha: 0.3)),
-                          padding: const EdgeInsets.symmetric(vertical: 11),
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(14))))),
-            ],
-          ),
-        ),
-      );
-      if (retry != true) return;
-    }
   }
 }
 
@@ -1745,6 +1760,8 @@ class WallpaperCard extends StatelessWidget {
                 CachedNetworkImage(
                     imageUrl: wallpaper.thumbnailUrl,
                     fit: BoxFit.cover,
+                    // فك تشفير أخف لأن حجم البطاقة أصبح أصغر (3 أعمدة)
+                    memCacheWidth: 400,
                     placeholder: (_, __) => const ShimmerLoadingCard(),
                     errorWidget: (_, __, error) {
                       AppLogger.error(
@@ -2566,11 +2583,13 @@ class _WallpaperGridLoaderState extends State<_WallpaperGridLoader> {
                       itemBuilder: (context, index) {
                         final heroTag =
                             'wp_${wallpapers[index].id}_${widget.categoryName}_$index';
-                        return WallpaperCard(
-                            wallpaper: wallpapers[index],
-                            heroTag: heroTag,
-                            onTap: () => _navigateWithAd(
-                                wallpapers[index], heroTag, wallpapers, index));
+                        return RepaintBoundary(
+                          child: WallpaperCard(
+                              wallpaper: wallpapers[index],
+                              heroTag: heroTag,
+                              onTap: () => _navigateWithAd(wallpapers[index],
+                                  heroTag, wallpapers, index)),
+                        );
                       },
                     ),
             ),
@@ -2724,8 +2743,15 @@ class HomeScreen extends StatelessWidget {
 
   SliverToBoxAdapter _horizontalList(BuildContext context, String category) {
     final is169 = category == '16:9' || category == '16:9 Ratio';
-    final cardWidth = is169 ? 285.0 : 150.0;
-    final cardHeight = is169 ? 160.0 : 250.0;
+    // ✅ عرض البطاقة يُحسب من عرض الشاشة نفسها بحيث تظهر 3 بطاقات كاملة
+    // في كل صف بدل حجم ثابت (150) كان يعرض بطاقتين ونص فقط.
+    final screenWidth = MediaQuery.of(context).size.width;
+    const horizontalPadding = 16.0;
+    const cardSpacing = 10.0;
+    final portraitCardWidth =
+        (screenWidth - (horizontalPadding * 2) - (cardSpacing * 2)) / 3;
+    final cardWidth = is169 ? 285.0 : portraitCardWidth;
+    final cardHeight = is169 ? 160.0 : cardWidth / 0.6;
     return SliverToBoxAdapter(
       child: FutureBuilder<List<WallpaperModel>>(
         future: GitHubService.getWallpapers(category),
@@ -2735,9 +2761,11 @@ class HomeScreen extends StatelessWidget {
                 height: cardHeight,
                 child: ListView.separated(
                     scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: horizontalPadding),
                     itemCount: 5,
-                    separatorBuilder: (_, __) => const SizedBox(width: 12),
+                    separatorBuilder: (_, __) =>
+                        const SizedBox(width: cardSpacing),
                     itemBuilder: (_, __) => SizedBox(
                         width: cardWidth, child: const ShimmerLoadingCard())));
           if (!snapshot.hasData || snapshot.data!.isEmpty)
@@ -2749,9 +2777,10 @@ class HomeScreen extends StatelessWidget {
             height: cardHeight,
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 16),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: horizontalPadding),
               itemCount: totalCount,
-              separatorBuilder: (_, __) => const SizedBox(width: 12),
+              separatorBuilder: (_, __) => const SizedBox(width: cardSpacing),
               itemBuilder: (context, displayIndex) {
                 const int adInterval = 6;
                 int imageIndex = displayIndex - (displayIndex ~/ adInterval);
@@ -3092,181 +3121,90 @@ class _TopAutoSlider169State extends State<_TopAutoSlider169> {
               ],
             ),
           ),
-          // ── جسم السلايدر الزجاجي ──
+          // ── جسم السلايدر — الصورة فقط بدون أي شريط أو تراكب ──
           AspectRatio(
             aspectRatio: 16 / 9,
-            child: Stack(
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(28),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      boxShadow: [
-                        BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.35),
-                            blurRadius: 24,
-                            offset: const Offset(0, 12)),
-                      ],
-                    ),
-                    child: NotificationListener<ScrollNotification>(
-                      onNotification: (notif) {
-                        if (notif is ScrollStartNotification) {
-                          _timer?.cancel();
-                        }
-                        if (notif is ScrollEndNotification) {
-                          _restartAutoSlideDelayed();
-                        }
-                        return false;
-                      },
-                      child: PageView.builder(
-                        controller: _pageController,
-                        itemCount: _wallpapers.length,
-                        onPageChanged: (i) => setState(() => _currentPage = i),
-                        itemBuilder: (context, index) {
-                          final wallpaper = _wallpapers[index];
-                          return GestureDetector(
-                            onTap: () => _openWallpaper(context, index),
-                            child: Hero(
-                              tag: 'slider_thumb_${wallpaper.id}',
-                              child: CachedNetworkImage(
-                                imageUrl: wallpaper.thumbnailUrl.isNotEmpty
-                                    ? wallpaper.thumbnailUrl
-                                    : wallpaper.imageUrl,
-                                fit: BoxFit.cover,
-                                fadeInDuration:
-                                    const Duration(milliseconds: 350),
-                                placeholder: (_, __) =>
-                                    const ShimmerLoadingCard(),
-                                errorWidget: (_, __, ___) =>
-                                    Container(color: Colors.grey[900]),
-                              ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(28),
+              child: Container(
+                decoration: BoxDecoration(
+                  boxShadow: [
+                    BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.35),
+                        blurRadius: 24,
+                        offset: const Offset(0, 12)),
+                  ],
+                ),
+                child: NotificationListener<ScrollNotification>(
+                  onNotification: (notif) {
+                    if (notif is ScrollStartNotification) {
+                      _timer?.cancel();
+                    }
+                    if (notif is ScrollEndNotification) {
+                      _restartAutoSlideDelayed();
+                    }
+                    return false;
+                  },
+                  child: PageView.builder(
+                    controller: _pageController,
+                    itemCount: _wallpapers.length,
+                    onPageChanged: (i) => setState(() => _currentPage = i),
+                    // تحسين السلاسة: يبني صفحة إضافية قبل وبعد الصفحة الحالية
+                    // مسبقاً حتى تكون الصورة جاهزة لحظة وصول السحب إليها
+                    allowImplicitScrolling: true,
+                    itemBuilder: (context, index) {
+                      final wallpaper = _wallpapers[index];
+                      return RepaintBoundary(
+                        child: GestureDetector(
+                          onTap: () => _openWallpaper(context, index),
+                          child: Hero(
+                            tag: 'slider_thumb_${wallpaper.id}',
+                            child: CachedNetworkImage(
+                              imageUrl: wallpaper.thumbnailUrl.isNotEmpty
+                                  ? wallpaper.thumbnailUrl
+                                  : wallpaper.imageUrl,
+                              fit: BoxFit.cover,
+                              // تقليل حجم فك التشفير يقلل استهلاك الذاكرة
+                              // ويجعل التمرير أكثر سلاسة مع الصور عالية الدقة
+                              memCacheWidth: 900,
+                              fadeInDuration: const Duration(milliseconds: 250),
+                              placeholder: (_, __) =>
+                                  const ShimmerLoadingCard(),
+                              errorWidget: (_, __, ___) =>
+                                  Container(color: Colors.grey[900]),
                             ),
-                          );
-                        },
-                      ),
-                    ),
-                  ),
-                ),
-                // تدرّج خفيف جداً في الحواف فقط (لا يغطي مركز الصورة إطلاقاً)
-                Positioned.fill(
-                  child: IgnorePointer(
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(28),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            colors: [
-                              Colors.black.withValues(alpha: 0.22),
-                              Colors.transparent,
-                              Colors.transparent,
-                              Colors.black.withValues(alpha: 0.18),
-                            ],
-                            stops: const [0.0, 0.14, 0.86, 1.0],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                // شارة زجاجية علوية يسار: 16:9
-                Positioned(
-                  top: 12,
-                  left: 12,
-                  child: _glass(
-                    radius: 20,
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                    child: Row(mainAxisSize: MainAxisSize.min, children: [
-                      const Icon(Icons.hd_rounded,
-                          color: Colors.cyanAccent, size: 14),
-                      const SizedBox(width: 4),
-                      Text('16:9',
-                          style: AppFonts.poppins(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 11)),
-                    ]),
-                  ),
-                ),
-                // شارة زجاجية علوية يمين: عداد الصفحات
-                Positioned(
-                  top: 12,
-                  right: 12,
-                  child: _glass(
-                    radius: 20,
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                    child: Text('${_currentPage + 1} / ${_wallpapers.length}',
-                        style: AppFonts.poppins(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 11)),
-                  ),
-                ),
-                // زر مفضلة زجاجي صغير أسفل اليمين (لا يغطي إلا زاوية صغيرة)
-                Positioned(
-                  bottom: 12,
-                  right: 12,
-                  child: Consumer<FavoritesProvider>(
-                    builder: (context, favProvider, _) {
-                      final wallpaper = _wallpapers[_currentPage];
-                      final isFav = favProvider.isFavorite(wallpaper.id);
-                      return GestureDetector(
-                        onTap: () => favProvider.toggle(wallpaper),
-                        child: _glass(
-                          radius: 30,
-                          opacity: 0.20,
-                          padding: const EdgeInsets.all(8),
-                          child: Icon(
-                            isFav
-                                ? Icons.favorite_rounded
-                                : Icons.favorite_border_rounded,
-                            color: isFav ? Colors.redAccent : Colors.white,
-                            size: 17,
                           ),
                         ),
                       );
                     },
                   ),
                 ),
-              ],
+              ),
             ),
           ),
-          // ── معلومات + مؤشر الصفحات أسفل الصورة (خارج الإطار تماماً) ──
+          // ── مؤشر الصفحات فقط، أسفل الصورة تماماً (خارج الإطار) ──
           Padding(
             padding: const EdgeInsets.only(top: 10),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Flexible(
-                  child: Text('اسحب لاستعراض المزيد من الخلفيات',
-                      style:
-                          AppFonts.poppins(color: Colors.white60, fontSize: 11),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis),
-                ),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: List.generate(_wallpapers.length, (i) {
-                    final isActive = _currentPage == i;
-                    return AnimatedContainer(
-                      duration: const Duration(milliseconds: 350),
-                      curve: Curves.easeInOutCubic,
-                      margin: const EdgeInsets.symmetric(horizontal: 2.5),
-                      width: isActive ? 18 : 6,
-                      height: 6,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(3),
-                        color: isActive
-                            ? Colors.cyanAccent
-                            : Colors.white.withValues(alpha: 0.25),
-                      ),
-                    );
-                  }),
-                ),
-              ],
+            child: Center(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: List.generate(_wallpapers.length, (i) {
+                  final isActive = _currentPage == i;
+                  return AnimatedContainer(
+                    duration: const Duration(milliseconds: 350),
+                    curve: Curves.easeInOutCubic,
+                    margin: const EdgeInsets.symmetric(horizontal: 2.5),
+                    width: isActive ? 18 : 6,
+                    height: 6,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(3),
+                      color: isActive
+                          ? Colors.cyanAccent
+                          : Colors.white.withValues(alpha: 0.25),
+                    ),
+                  );
+                }),
+              ),
             ),
           ),
         ],
@@ -4000,20 +3938,21 @@ class _MainLayoutState extends State<MainLayout> {
           barrierDismissible: false,
           builder: (_) => const PrivacyPolicyDialog()).then((_) async {
         if (!mounted) return;
-        await PermissionsInitializer.requestOnFirstLaunch(context);
-        if (!mounted) return;
-        if (Platform.isAndroid) {
-          await NotificationService.requestPermissionAndSubscribe();
-        }
+
+        // طلب الأذونات بعد الموافقة على السياسة
+        await _requestInitialPermissions();
       });
     } else {
-      PermissionsInitializer.requestOnFirstLaunch(context).then((_) async {
-        if (!mounted) return;
-        if (Platform.isAndroid) {
-          await NotificationService.requestPermissionAndSubscribe();
-        }
-      });
+      _requestInitialPermissions();
     }
+  }
+
+  Future<void> _requestInitialPermissions() async {
+    // 1. طلب إذن الإشعارات (أندرويد و iOS)
+    await NotificationService.requestPermissionAndSubscribe();
+
+    // 2. طلب إذن الصور/التخزين عند فتح التطبيق
+    await GalleryPermission.request();
   }
 
   @override
@@ -4099,26 +4038,14 @@ void main() async {
     return true; // امتصاص الخطأ بدل تحطم التطبيق
   };
 
-  // ✅ Firebase مُعطّل تماماً على iOS لهذه النسخة (خطوة تشخيصية) - يعمل على أندرويد فقط
-  if (Platform.isAndroid) {
-    try {
-      await Firebase.initializeApp();
-      AppLogger.success('✅ Firebase initialized successfully');
-    } catch (e) {
-      AppLogger.error('❌ Firebase initialization failed: $e');
-    }
-  } else {
-    AppLogger.info('ℹ️ Firebase disabled on iOS for this build');
-  }
-
-  // ✅ خدمة الإشعارات مبنية على Firebase Messaging - تعمل على أندرويد فقط بنفس السبب
-  if (Platform.isAndroid) {
-    try {
-      await NotificationService.initialize();
-      AppLogger.success('✅ Notification service initialized');
-    } catch (e) {
-      AppLogger.error('❌ Notification service failed: $e');
-    }
+  // ✅ تفعيل Firebase وخدمة الإشعارات لجميع المنصات
+  try {
+    await Firebase.initializeApp();
+    AppLogger.success('✅ Firebase initialized successfully');
+    await NotificationService.initialize();
+    AppLogger.success('✅ Notification service initialized');
+  } catch (e) {
+    AppLogger.error('❌ Firebase/Notification initialization failed: $e');
   }
 
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
