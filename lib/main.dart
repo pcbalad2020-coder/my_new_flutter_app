@@ -436,22 +436,22 @@ class AdMobIds {
 
   static String get interstitialAdUnitId {
     if (Platform.isAndroid) return 'ca-app-pub-4756404048214956/7589450639';
-    return 'ca-app-pub-4756404048214956/7085755851';
+    return 'ca-app-pub-3940256099942544/1033173712';
   }
 
   static String get rewardedAdUnitId {
     if (Platform.isAndroid) return 'ca-app-pub-4756404048214956/8168076692';
-    return 'ca-app-pub-4756404048214956/8175476247';
+    return 'ca-app-pub-3940256099942544/5224354917';
   }
 
   static String get nativeAdUnitId {
     if (Platform.isAndroid) return 'ca-app-pub-4756404048214956/2620236541';
-    return 'ca-app-pub-4756404048214956/1223055087';
+    return 'ca-app-pub-3940256099942544/2247696110';
   }
 
   static String get appOpenAdUnitId {
     if (Platform.isAndroid) return 'ca-app-pub-4756404048214956/7070617440';
-    return 'ca-app-pub-4756404048214956/5549312903';
+    return 'ca-app-pub-3940256099942544/3419835294';
   }
 }
 
@@ -660,89 +660,115 @@ class AdMobManager {
 }
 
 // ─── Banner Ad Widget ─────────────────────────────────────────────────────────
-class BannerAdWidget extends StatefulWidget {
-  final AdSize adSize;
-  const BannerAdWidget({super.key, this.adSize = AdSize.banner});
+class ResponsiveBannerConfig {
+  final double width;
+  final double height;
+  final bool useCompactLayout;
 
-  @override
-  State<BannerAdWidget> createState() => _BannerAdWidgetState();
+  const ResponsiveBannerConfig({
+    required this.width,
+    required this.height,
+    required this.useCompactLayout,
+  });
+
+  factory ResponsiveBannerConfig.fromScreenWidth(double screenWidth) {
+    if (screenWidth < 360) {
+      return const ResponsiveBannerConfig(
+        width: 320,
+        height: 50,
+        useCompactLayout: true,
+      );
+    }
+    if (screenWidth < 400) {
+      return const ResponsiveBannerConfig(
+        width: 320,
+        height: 90,
+        useCompactLayout: true,
+      );
+    }
+    return const ResponsiveBannerConfig(
+      width: 468,
+      height: 90,
+      useCompactLayout: false,
+    );
+  }
 }
 
-class _BannerAdWidgetState extends State<BannerAdWidget> {
+class ResponsiveBannerAdWidget extends StatefulWidget {
+  final EdgeInsetsGeometry padding;
+  const ResponsiveBannerAdWidget(
+      {super.key,
+      this.padding = const EdgeInsets.symmetric(horizontal: 12, vertical: 8)});
+
+  @override
+  State<ResponsiveBannerAdWidget> createState() =>
+      _ResponsiveBannerAdWidgetState();
+}
+
+class _ResponsiveBannerAdWidgetState extends State<ResponsiveBannerAdWidget> {
   BannerAd? _bannerAd;
   bool _isLoaded = false;
+  ResponsiveBannerConfig? _config;
 
   @override
   void initState() {
     super.initState();
-    _loadAd();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _loadAd();
+      }
+    });
   }
-
-  void _loadAd() {
-    _bannerAd = BannerAd(
-      adUnitId: AdMobIds.bannerAdUnitId,
-      size: widget.adSize,
-      request: const AdRequest(),
-      listener: BannerAdListener(
-        onAdLoaded: (ad) {
-          if (mounted) setState(() => _isLoaded = true);
-        },
-        onAdFailedToLoad: (ad, error) => ad.dispose(),
-      ),
-    );
-    _bannerAd!.load();
-  }
-
-  @override
-  void dispose() {
-    _bannerAd?.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (!_isLoaded || _bannerAd == null) return const SizedBox.shrink();
-    return Container(
-      alignment: Alignment.center,
-      width: _bannerAd!.size.width.toDouble(),
-      height: _bannerAd!.size.height.toDouble(),
-      child: AdWidget(ad: _bannerAd!),
-    );
-  }
-}
-
-class SmartBannerAdWidget extends StatefulWidget {
-  const SmartBannerAdWidget({super.key});
-
-  @override
-  State<SmartBannerAdWidget> createState() => _SmartBannerAdWidgetState();
-}
-
-class _SmartBannerAdWidgetState extends State<SmartBannerAdWidget> {
-  BannerAd? _bannerAd;
-  bool _isLoaded = false;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (_bannerAd == null) _loadSmartBanner();
+    if (!mounted) return;
+    final nextConfig = ResponsiveBannerConfig.fromScreenWidth(
+      MediaQuery.of(context).size.width,
+    );
+    if (_config?.height != nextConfig.height ||
+        _config?.width != nextConfig.width) {
+      _config = nextConfig;
+      _loadAd();
+    }
   }
 
-  Future<void> _loadSmartBanner() async {
+  @override
+  void didUpdateWidget(covariant ResponsiveBannerAdWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.padding != widget.padding) {
+      setState(() {});
+    }
+  }
+
+  Future<void> _loadAd() async {
+    _bannerAd?.dispose();
+    _bannerAd = null;
+    _isLoaded = false;
+    if (!mounted) return;
+    setState(() {});
+
+    final screenWidth = MediaQuery.of(context).size.width.truncate();
+    final orientation = MediaQuery.of(context).orientation;
     final size = await AdSize.getAnchoredAdaptiveBannerAdSize(
-      Orientation.portrait,
-      MediaQuery.of(context).size.width.truncate(),
+      orientation,
+      screenWidth,
     );
-    if (size == null) return;
+
+    final adSize = size ?? AdSize.banner;
     _bannerAd = BannerAd(
       adUnitId: AdMobIds.bannerAdUnitId,
-      size: size,
+      size: adSize,
       request: const AdRequest(),
       listener: BannerAdListener(
         onAdLoaded: (ad) {
           if (mounted) setState(() => _isLoaded = true);
         },
-        onAdFailedToLoad: (ad, error) => ad.dispose(),
+        onAdFailedToLoad: (ad, error) {
+          ad.dispose();
+          if (mounted) setState(() => _isLoaded = false);
+        },
       ),
     );
     await _bannerAd!.load();
@@ -756,13 +782,29 @@ class _SmartBannerAdWidgetState extends State<SmartBannerAdWidget> {
 
   @override
   Widget build(BuildContext context) {
-    if (!_isLoaded || _bannerAd == null) return const SizedBox.shrink();
-    return SizedBox(
-      width: _bannerAd!.size.width.toDouble(),
-      height: _bannerAd!.size.height.toDouble(),
-      child: AdWidget(ad: _bannerAd!),
+    if (!_isLoaded || _bannerAd == null) {
+      return const SizedBox.shrink();
+    }
+
+    return Padding(
+      padding: widget.padding,
+      child: Center(
+        child: SizedBox(
+          width: _bannerAd!.size.width.toDouble(),
+          height: _bannerAd!.size.height.toDouble(),
+          child: AdWidget(ad: _bannerAd!),
+        ),
+      ),
     );
   }
+}
+
+class BannerAdWidget extends ResponsiveBannerAdWidget {
+  const BannerAdWidget({super.key, super.padding});
+}
+
+class SmartBannerAdWidget extends ResponsiveBannerAdWidget {
+  const SmartBannerAdWidget({super.key, super.padding});
 }
 
 // =============================================================================
@@ -2343,7 +2385,7 @@ class _PreviewScreenState extends State<PreviewScreen> {
               left: 16,
               right: 16,
               child: Column(mainAxisSize: MainAxisSize.min, children: [
-                const BannerAdWidget(),
+                const ResponsiveBannerAdWidget(),
                 const SizedBox(height: 8),
                 GlassContainer(
                   opacity: 0.14,
@@ -2546,7 +2588,7 @@ class _WallpaperGridLoaderState extends State<_WallpaperGridLoader> {
         }
         final wallpapers = snapshot.data!;
         return Column(children: [
-          const SmartBannerAdWidget(),
+          const ResponsiveBannerAdWidget(),
           Expanded(
             child: RefreshIndicator(
               onRefresh: () async => _refresh(),
@@ -2845,7 +2887,7 @@ class HomeScreen extends StatelessWidget {
                 child: SizedBox(
                     width: width * 0.9,
                     height: height * 0.8,
-                    child: const BannerAdWidget(adSize: AdSize.banner))),
+                    child: const ResponsiveBannerAdWidget())),
             Positioned(
               top: 6,
               left: 6,
@@ -3300,7 +3342,8 @@ class FavoritesScreen extends StatelessWidget {
                       icon: const Icon(Icons.delete_outline, color: Colors.red),
                       onPressed: () => _confirmClearAll(context, favProvider))
               ]),
-          const SliverToBoxAdapter(child: Center(child: BannerAdWidget())),
+          const SliverToBoxAdapter(
+              child: Center(child: ResponsiveBannerAdWidget())),
           if (favProvider.favorites.isEmpty)
             SliverFillRemaining(
                 child: Center(
@@ -3495,7 +3538,7 @@ class SettingsScreen extends StatelessWidget {
               style: AppFonts.poppins(
                   fontWeight: FontWeight.bold, color: Colors.white))),
       body: ListView(padding: const EdgeInsets.all(16), children: [
-        const Center(child: BannerAdWidget()),
+        const Center(child: ResponsiveBannerAdWidget()),
         const SizedBox(height: 16),
         Container(
           padding: const EdgeInsets.all(16),

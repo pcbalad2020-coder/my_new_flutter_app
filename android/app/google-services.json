@@ -1,13 +1,13 @@
 {
   "project_info": {
-    "project_number": "442728881563",
-    "project_id": "km2wallpepar",
-    "storage_bucket": "km2wallpepar.firebasestorage.app"
+    "project_number": "174630805217",
+    "project_id": "km2wall",
+    "storage_bucket": "km2wall.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:442728881563:android:88aac45c6a84b32b7e153e",
+        "mobilesdk_app_id": "1:174630805217:android:f5feb8adee1edbb66ee1a0",
         "android_client_info": {
           "package_name": "com.kasem.wallpapers"
         }
@@ -15,7 +15,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyDuj674PKG21pvCT0WtYywQbxwqjKNC_uE"
+          "current_key": "AIzaSyAUdwtkBaYNdNPON5gH8sedL3u_kNm59WQ"
         }
       ],
       "services": {
