@@ -20,13 +20,6 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
-// =============================================================================
-// 🔤 APP FONTS — خط Poppins محلي (Assets) بدل google_fonts
-// =============================================================================
-// يستبدل AppFonts.poppins() بخط Poppins مضمّن داخل التطبيق (assets/fonts).
-// هذا يمنع أي محاولة تحميل خط من الإنترنت، وبالتالي يمنع كراش
-// "Failed host lookup: fonts.gstatic.com" نهائياً حتى بدون اتصال بالإنترنت.
-// تأكد من إضافة الخطوط في pubspec.yaml كما هو موضح في ملاحظات التسليم.
 class AppFonts {
   static TextStyle poppins({
     Color? color,
@@ -73,13 +66,23 @@ class AppFonts {
 }
 
 // =============================================================================
-// 🔔 NOTIFICATION SERVICE — 1خدمة الإشعارات
+// 📝 App Logger
+// =============================================================================
+class AppLogger {
+  static void info(String msg) => debugPrint('ℹ️  $msg');
+  static void success(String msg) => debugPrint('✅ $msg');
+  static void warning(String msg) => debugPrint('⚠️  $msg');
+  static void error(String msg) => debugPrint('❌ $msg');
+}
+
+// =============================================================================
+// 🔔 NOTIFICATION SERVICE — خدمة الإشعارات
 // =============================================================================
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
-  print("Handling a background message: ${message.messageId}");
+  AppLogger.info('Handling a background message: ${message.messageId}');
 }
 
 class NotificationService {
@@ -89,13 +92,12 @@ class NotificationService {
 
   static final GlobalKey<NavigatorState> navigatorKey =
       GlobalKey<NavigatorState>();
+
   static Future<void> initialize() async {
     try {
-      // 1. معالجة رسائل الخلفية
       FirebaseMessaging.onBackgroundMessage(
           _firebaseMessagingBackgroundHandler);
 
-      // ✅ التصحيح #1: هيّئ flutter_local_notifications أولاً قبل طلب أي إذن
       const AndroidInitializationSettings androidSettings =
           AndroidInitializationSettings('@mipmap/launcher_icon');
       const DarwinInitializationSettings iosSettings =
@@ -115,7 +117,6 @@ class NotificationService {
         onDidReceiveNotificationResponse: _onLocalNotificationTap,
       );
 
-      // قناة إشعارات أندرويد
       const AndroidNotificationChannel channel = AndroidNotificationChannel(
         'high_importance_channel',
         'High Importance Notifications',
@@ -132,7 +133,6 @@ class NotificationService {
         sound: true,
       );
 
-      // الاستماع للإشعارات في المقدمة (Foreground)
       FirebaseMessaging.onMessage.listen((RemoteMessage message) {
         try {
           RemoteNotification? notification = message.notification;
@@ -164,11 +164,9 @@ class NotificationService {
         }
       });
 
-      // عند الضغط على الإشعار (والتطبيق في الخلفية)
       FirebaseMessaging.onMessageOpenedApp
           .listen(_handleNotificationNavigation);
 
-      // التحقق إذا فُتح التطبيق من خلال إشعار (والتطبيق مغلق تماماً)
       try {
         RemoteMessage? initialMessage = await _fcm.getInitialMessage();
         if (initialMessage != null) {
@@ -232,7 +230,6 @@ class NotificationService {
     }
   }
 
-  // ✅ التصحيح #8: معالج جديد لضغطات الإشعار المحلي (كان غائباً)
   static void _onLocalNotificationTap(NotificationResponse response) {
     if (response.payload == null) return;
     try {
@@ -248,10 +245,8 @@ class NotificationService {
 
   static void _handleNotificationNavigation(RemoteMessage message) {
     try {
-      print('Message clicked! ${message.data}');
       final data = message.data;
 
-      // ✅ تحقق من أن navigator جاهز قبل الاستخدام
       if (navigatorKey.currentState == null) {
         AppLogger.warning(
             '⚠️ Navigator not ready yet, skipping notification navigation');
@@ -268,16 +263,13 @@ class NotificationService {
         );
       } else if (data['action'] == 'open_wallpaper' &&
           data['wallpaper_id'] != null) {
-        String wallpaperId = data['wallpaper_id'];
-        // يمكن إضافة منطق فتح الخلفية المحددة هنا لاحقاً
-        AppLogger.info('📸 Opening wallpaper: $wallpaperId');
+        AppLogger.info('📸 Opening wallpaper: ${data['wallpaper_id']}');
       }
     } catch (e) {
       AppLogger.error('❌ Error in _handleNotificationNavigation: $e');
     }
   }
 
-  // ✅ التصحيح #9: ترجع bool الآن لمعرفة هل سُمح بالإذن فعلاً أم لا
   static Future<bool> _requestPermissions() async {
     if (Platform.isAndroid) {
       final sdkInt = await _androidSdkInt();
@@ -313,8 +305,7 @@ class NotificationService {
               settings.authorizationStatus == AuthorizationStatus.provisional;
 
       if (!granted) {
-        AppLogger.warning(
-            '⚠️ User declined or has not accepted notification permissions: '
+        AppLogger.warning('⚠️ User declined notification permissions: '
             '${settings.authorizationStatus}');
       }
 
@@ -332,22 +323,14 @@ class NotificationService {
 }
 
 // =============================================================================
-// 📝 App Logger — نظام الـ logging
-// =============================================================================
-class AppLogger {
-  static void info(String msg) => debugPrint('ℹ️  $msg');
-  static void success(String msg) => debugPrint('✅ $msg');
-  static void warning(String msg) => debugPrint('⚠️  $msg');
-  static void error(String msg) => debugPrint('❌ $msg');
-}
-
-// =============================================================================
-// 🔐 GALLERY PERMISSION HELPER — منطق موحّد لإذن حفظ الصور
+// 🔐 GALLERY PERMISSION HELPER
 // =============================================================================
 
 enum GalleryPermissionResult { granted, denied, permanentlyDenied }
 
 class GalleryPermission {
+  static int? _cachedSdkInt;
+
   static Future<bool> isGranted() async {
     if (Platform.isIOS) {
       final status = await Permission.photos.status;
@@ -357,18 +340,10 @@ class GalleryPermission {
     if (sdkInt >= 33) {
       return (await Permission.photos.status).isGranted;
     }
-    if (sdkInt >= 29) {
-      // Scoped Storage: لا حاجة لإذن لحفظ ملف جديد ينشئه التطبيق.
-      return true;
-    }
+    if (sdkInt >= 29) return true; // Scoped Storage
     return (await Permission.storage.status).isGranted;
   }
 
-  /// ✅ يطلب الإذن بجولة واحدة فقط على القناة الأصلية (native channel)، ويستخدم
-  /// نتيجة نفس الاستدعاء مباشرة بدل قراءة `.status` مرة أخرى بعدها. القراءة
-  /// المنفصلة بعد `.request()` كانت أحياناً ترجع حالة قديمة (race condition)
-  /// فيظن الكود أن الإذن "مرفوض دائماً" رغم أن المستخدم وافق للتو، فيحوّله
-  /// خطأً إلى صفحة الإعدادات. هذا هو المصدر الوحيد المعتمد للقرار الآن.
   static Future<GalleryPermissionResult> requestOnce() async {
     if (Platform.isIOS) {
       final status = await Permission.photos.request();
@@ -381,14 +356,10 @@ class GalleryPermission {
     }
     final sdkInt = await _androidSdkInt();
     if (sdkInt >= 29 && sdkInt < 33) {
-      // Scoped Storage: لا حاجة لإذن لحفظ ملف جديد ينشئه التطبيق.
       return GalleryPermissionResult.granted;
     }
     final permission = sdkInt >= 33 ? Permission.photos : Permission.storage;
 
-    // إذا كان مرفوضاً بشكل دائم مسبقاً، طلبه مجدداً لن يُظهر أي حوار أصلاً
-    // (سلوك أندرويد القياسي)، فنوجّه المستخدم للإعدادات مباشرة بدل تكرار
-    // محاولة لا فائدة منها تبدو للمستخدم وكأنها "حوار ثانٍ صامت".
     if (await permission.status.isPermanentlyDenied) {
       return GalleryPermissionResult.permanentlyDenied;
     }
@@ -400,7 +371,6 @@ class GalleryPermission {
         : GalleryPermissionResult.denied;
   }
 
-  /// نسخة قديمة تُبقي التوافق مع أي كود آخر يستدعيها (ترجع true/false فقط).
   static Future<bool> request() async {
     final result = await requestOnce();
     return result == GalleryPermissionResult.granted;
@@ -414,19 +384,22 @@ class GalleryPermission {
     if (sdkInt >= 33) {
       return (await Permission.photos.status).isPermanentlyDenied;
     }
-    if (sdkInt >= 29) return false; // لا إذن مطلوب أصلاً
+    if (sdkInt >= 29) return false;
     return (await Permission.storage.status).isPermanentlyDenied;
   }
 
+  // ✅ تحسين: قراءة نسخة أندرويد مرة واحدة فقط وتخزينها (كانت تُقرأ في كل نداء)
   static Future<int> _androidSdkInt() async {
+    if (_cachedSdkInt != null) return _cachedSdkInt!;
     final deviceInfo = DeviceInfoPlugin();
     final androidInfo = await deviceInfo.androidInfo;
-    return androidInfo.version.sdkInt;
+    _cachedSdkInt = androidInfo.version.sdkInt;
+    return _cachedSdkInt!;
   }
 }
 
 // =============================================================================
-// 0. ADMOB SERVICE — خدمة إدارة جميع أنواع الإعلانات
+// 0. ADMOB SERVICE
 // =============================================================================
 class AdMobIds {
   static String get bannerAdUnitId {
@@ -467,13 +440,18 @@ class AdMobManager {
   int _rewardedLoadAttempts = 0;
   AppOpenAd? _appOpenAd;
   bool _isShowingAd = false;
+  bool _initialized = false;
   DateTime? _appOpenLoadTime;
   int _viewCount = 0;
   static const int _interstitialInterval = 5;
   static const String _viewCountKey = 'admob_wallpaper_view_count';
 
+  bool get isInitialized => _initialized;
+
   Future<void> initialize() async {
+    if (_initialized) return;
     await MobileAds.instance.initialize();
+    _initialized = true;
     try {
       final prefs = await SharedPreferences.getInstance();
       _viewCount = prefs.getInt(_viewCountKey) ?? 0;
@@ -485,22 +463,8 @@ class AdMobManager {
     _loadAppOpenAd();
   }
 
-  BannerAd createBannerAd() {
-    return BannerAd(
-      adUnitId: AdMobIds.bannerAdUnitId,
-      size: AdSize.banner,
-      request: const AdRequest(),
-      listener: BannerAdListener(
-        onAdLoaded: (ad) => AppLogger.success('Banner ad loaded'),
-        onAdFailedToLoad: (ad, error) {
-          AppLogger.error('Banner ad failed: $error');
-          ad.dispose();
-        },
-      ),
-    );
-  }
-
   void _loadInterstitialAd() {
+    if (!_initialized) return;
     InterstitialAd.load(
       adUnitId: AdMobIds.interstitialAdUnitId,
       request: const AdRequest(),
@@ -513,8 +477,9 @@ class AdMobManager {
         onAdFailedToLoad: (error) {
           _interstitialLoadAttempts++;
           _interstitialAd = null;
-          if (_interstitialLoadAttempts < _maxFailedLoadAttempts)
+          if (_interstitialLoadAttempts < _maxFailedLoadAttempts) {
             _loadInterstitialAd();
+          }
         },
       ),
     );
@@ -563,6 +528,7 @@ class AdMobManager {
   }
 
   void _loadRewardedAd() {
+    if (!_initialized) return;
     RewardedAd.load(
       adUnitId: AdMobIds.rewardedAdUnitId,
       request: const AdRequest(),
@@ -574,17 +540,27 @@ class AdMobManager {
         onAdFailedToLoad: (error) {
           _rewardedLoadAttempts++;
           _rewardedAd = null;
-          if (_rewardedLoadAttempts < _maxFailedLoadAttempts) _loadRewardedAd();
+          if (_rewardedLoadAttempts < _maxFailedLoadAttempts) {
+            _loadRewardedAd();
+          }
         },
       ),
     );
   }
 
+  /// ✅ إصلاح: كان يخرج بصمت إذا لم يكن الإعلان جاهزاً فلا يحدث شيء للمستخدم.
+  /// الآن يُبلّغ عبر onAdNotReady ويعيد المحاولة في الخلفية.
   void showRewardedAd({
     required Function(AdWithoutView, RewardItem) onUserEarnedReward,
     VoidCallback? onAdDismissed,
+    VoidCallback? onAdNotReady,
   }) {
-    if (_rewardedAd == null) return;
+    if (_rewardedAd == null) {
+      _rewardedLoadAttempts = 0;
+      _loadRewardedAd();
+      onAdNotReady?.call();
+      return;
+    }
     _rewardedAd!.fullScreenContentCallback = FullScreenContentCallback(
       onAdDismissedFullScreenContent: (ad) {
         ad.dispose();
@@ -596,6 +572,7 @@ class AdMobManager {
         ad.dispose();
         _rewardedAd = null;
         _loadRewardedAd();
+        onAdNotReady?.call();
       },
     );
     _rewardedAd!.show(onUserEarnedReward: onUserEarnedReward);
@@ -604,6 +581,7 @@ class AdMobManager {
   bool get isRewardedAdReady => _rewardedAd != null;
 
   void _loadAppOpenAd() {
+    if (!_initialized) return;
     AppOpenAd.load(
       adUnitId: AdMobIds.appOpenAdUnitId,
       request: const AdRequest(),
@@ -620,8 +598,7 @@ class AdMobManager {
   bool get _isAppOpenAdAvailable {
     if (_appOpenAd == null) return false;
     if (_appOpenLoadTime != null) {
-      final diff = DateTime.now().difference(_appOpenLoadTime!);
-      return diff.inHours < 4;
+      return DateTime.now().difference(_appOpenLoadTime!).inHours < 4;
     }
     return false;
   }
@@ -659,41 +636,9 @@ class AdMobManager {
   }
 }
 
-// ─── Banner Ad Widget ─────────────────────────────────────────────────────────
-class ResponsiveBannerConfig {
-  final double width;
-  final double height;
-  final bool useCompactLayout;
-
-  const ResponsiveBannerConfig({
-    required this.width,
-    required this.height,
-    required this.useCompactLayout,
-  });
-
-  factory ResponsiveBannerConfig.fromScreenWidth(double screenWidth) {
-    if (screenWidth < 360) {
-      return const ResponsiveBannerConfig(
-        width: 320,
-        height: 50,
-        useCompactLayout: true,
-      );
-    }
-    if (screenWidth < 400) {
-      return const ResponsiveBannerConfig(
-        width: 320,
-        height: 90,
-        useCompactLayout: true,
-      );
-    }
-    return const ResponsiveBannerConfig(
-      width: 468,
-      height: 90,
-      useCompactLayout: false,
-    );
-  }
-}
-
+// ─── Banner Ad Widget ────────────────────────────────────────────────────────
+// ✅ إصلاح: كان يُحمَّل مرتين (initState + didChangeDependencies) لكل بانر.
+// الآن التحميل من didChangeDependencies فقط، مع حارس تخلّص عند إلغاء الودجت.
 class ResponsiveBannerAdWidget extends StatefulWidget {
   final EdgeInsetsGeometry padding;
   const ResponsiveBannerAdWidget(
@@ -708,62 +653,49 @@ class ResponsiveBannerAdWidget extends StatefulWidget {
 class _ResponsiveBannerAdWidgetState extends State<ResponsiveBannerAdWidget> {
   BannerAd? _bannerAd;
   bool _isLoaded = false;
-  ResponsiveBannerConfig? _config;
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        _loadAd();
-      }
-    });
-  }
+  double? _lastWidth;
+  Orientation? _lastOrientation;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (!mounted) return;
-    final nextConfig = ResponsiveBannerConfig.fromScreenWidth(
-      MediaQuery.of(context).size.width,
-    );
-    if (_config?.height != nextConfig.height ||
-        _config?.width != nextConfig.width) {
-      _config = nextConfig;
-      _loadAd();
-    }
+    final media = MediaQuery.of(context);
+    final width = media.size.width;
+    if (_lastWidth == width && _lastOrientation == media.orientation) return;
+    _lastWidth = width;
+    _lastOrientation = media.orientation;
+    _loadAd(width.truncate(), media.orientation);
   }
 
-  @override
-  void didUpdateWidget(covariant ResponsiveBannerAdWidget oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.padding != widget.padding) {
-      setState(() {});
-    }
-  }
-
-  Future<void> _loadAd() async {
+  Future<void> _loadAd(int screenWidth, Orientation orientation) async {
     _bannerAd?.dispose();
     _bannerAd = null;
-    _isLoaded = false;
     if (!mounted) return;
-    setState(() {});
+    setState(() => _isLoaded = false);
 
-    final screenWidth = MediaQuery.of(context).size.width.truncate();
-    final orientation = MediaQuery.of(context).orientation;
+    // إذا لم تكتمل تهيئة AdMob بعد (شبكة بطيئة) ننتظر قليلاً ثم نحاول مرة أخرى
+    if (!AdMobManager().isInitialized) {
+      await Future.delayed(const Duration(seconds: 2));
+      if (!mounted || !AdMobManager().isInitialized) return;
+    }
+
     final size = await AdSize.getAnchoredAdaptiveBannerAdSize(
       orientation,
       screenWidth,
     );
+    if (!mounted) return;
 
-    final adSize = size ?? AdSize.banner;
-    _bannerAd = BannerAd(
+    final ad = BannerAd(
       adUnitId: AdMobIds.bannerAdUnitId,
-      size: adSize,
+      size: size ?? AdSize.banner,
       request: const AdRequest(),
       listener: BannerAdListener(
         onAdLoaded: (ad) {
-          if (mounted) setState(() => _isLoaded = true);
+          if (!mounted) {
+            ad.dispose();
+            return;
+          }
+          setState(() => _isLoaded = true);
         },
         onAdFailedToLoad: (ad, error) {
           ad.dispose();
@@ -771,7 +703,13 @@ class _ResponsiveBannerAdWidgetState extends State<ResponsiveBannerAdWidget> {
         },
       ),
     );
-    await _bannerAd!.load();
+    _bannerAd = ad;
+    await ad.load();
+    // إذا أُلغيت الشاشة أثناء التحميل نتخلص من الإعلان فوراً (منع تسريب ذاكرة)
+    if (!mounted) {
+      ad.dispose();
+      _bannerAd = null;
+    }
   }
 
   @override
@@ -782,10 +720,7 @@ class _ResponsiveBannerAdWidgetState extends State<ResponsiveBannerAdWidget> {
 
   @override
   Widget build(BuildContext context) {
-    if (!_isLoaded || _bannerAd == null) {
-      return const SizedBox.shrink();
-    }
-
+    if (!_isLoaded || _bannerAd == null) return const SizedBox.shrink();
     return Padding(
       padding: widget.padding,
       child: Center(
@@ -813,8 +748,15 @@ class SmartBannerAdWidget extends ResponsiveBannerAdWidget {
 class WallpaperModel {
   final String id;
   final String title;
+
+  /// الرابط الأساسي (jsDelivr CDN) — المسار المعتمد للعرض والتحميل
   final String imageUrl;
-  final String thumbnailUrl;
+
+  /// ✅ رابط احتياطي مستقل (raw.githubusercontent) يُجرَّب تلقائياً إذا فشل
+  /// أو تعلّق الرابط الأساسي. وجود مسارين مختلفين تماماً يضمن ظهور الصورة
+  /// حتى لو حُجب أحد النطاقين على شبكة المستخدم.
+  final String fallbackUrl;
+
   final String category;
   final String repository;
   final int width;
@@ -825,7 +767,7 @@ class WallpaperModel {
     required this.id,
     required this.title,
     required this.imageUrl,
-    required this.thumbnailUrl,
+    this.fallbackUrl = '',
     required this.category,
     required this.repository,
     required this.width,
@@ -837,7 +779,7 @@ class WallpaperModel {
         'id': id,
         'title': title,
         'imageUrl': imageUrl,
-        'thumbnailUrl': thumbnailUrl,
+        'fallbackUrl': fallbackUrl,
         'category': category,
         'repository': repository,
         'width': width,
@@ -846,18 +788,25 @@ class WallpaperModel {
       };
 
   factory WallpaperModel.fromJson(Map<String, dynamic> json) => WallpaperModel(
-        id: json['id'],
-        title: json['title'],
-        imageUrl: json['imageUrl'],
-        thumbnailUrl: json['thumbnailUrl'],
-        category: json['category'],
-        repository: json['repository'],
-        width: json['width'],
-        height: json['height'],
-        uploadedAt: DateTime.parse(json['uploadedAt']),
+        id: json['id'] as String,
+        title: json['title'] as String? ?? '',
+        imageUrl: json['imageUrl'] as String? ?? '',
+        fallbackUrl: json['fallbackUrl'] as String? ?? '',
+        category: json['category'] as String? ?? '',
+        repository: json['repository'] as String? ?? '',
+        width: json['width'] as int? ?? 1080,
+        height: json['height'] as int? ?? 1920,
+        uploadedAt: DateTime.tryParse(json['uploadedAt'] as String? ?? '') ??
+            DateTime.now(),
       );
 
   bool get isLandscape => width > height;
+
+  /// ✅ يُحسب وقت العرض لا وقت الإنشاء: لو تبيّن أن وسيط الضغط غير متاح على
+  /// شبكة المستخدم يعود تلقائياً للرابط الأصلي بلا حاجة لإعادة جلب أي شيء،
+  /// كما أن المفضلة المحفوظة لا تعلق على رابط وسيط قديم.
+  String get thumbnailUrl =>
+      GitHubService.thumbUrl(imageUrl, width: isLandscape ? 700 : 400);
 }
 
 class CategoryModel {
@@ -876,26 +825,27 @@ class CategoryModel {
 
 // =============================================================================
 // 2. GITHUB SERVICE
-// =============================================================================
-//
-// ✅ إصلاحات هذه النسخة:
-// 1) الاعتماد الأساسي على jsDelivr CDN بدل raw.githubusercontent.com لعرض
-//    الصور — jsDelivr موزّع عالمياً (multi-region CDN) وأكثر ثباتاً من ناحية
-//    الوصول في شبكات/دول كثيرة، وليس له حدود Rate Limit كـ GitHub API.
-// 2) استخدام Git Trees API كمصدر أساسي لقائمة الملفات (طلب واحد فقط لكل
-//    مستودع) بدل Contents API، مع الرجوع التلقائي لـ Contents API كخطة بديلة
-//    فقط إذا فشل Trees API.
-// 3) رفع مهلات الاتصال (timeouts) لتلائم الشبكات الضعيفة.
-// 4) تسجيل تفصيلي لنوع الخطأ (DioExceptionType + status code) لتشخيص أسرع
-//    عند أي مستخدم يبلّغ عن مشكلة تحميل.
-// 5) رؤوس (headers) مخففة عند استخدام jsDelivr (لا حاجة لتوكن GitHub لعرض
-//    الصور، فقط لقراءة قائمة الملفات إن رغبت).
+// -----------------------------------------------------------------------------
+// ✅ تعديلات الأداء في هذه النسخة:
+// 1) الكاش صار على مستوى «المستودع» لا «القسم»: New و Best و All Images تشترك
+//    في نفس المستودع All-images، فكانت تُطلب 3 مرات — الآن مرة واحدة.
+// 2) منع الطلبات المتزامنة المكررة (_inFlight): عند فتح الرئيسية تُطلب عدة
+//    أقسام في نفس اللحظة، وبعضها لنفس المستودع.
+// 3) مصغّرات مضغوطة عبر wsrv.nl بدل تحميل صور 4K كاملة في الشبكة/القوائم
+//    (أكبر تحسين منفرد للسرعة والبيانات). أوقفه بجعل _useThumbProxy = false.
+// 4) كاش مستقبلات الواجهة (futureOf) لمنع إعادة الطلب مع كل إعادة بناء.
 // =============================================================================
 class GitHubService {
   static const String _owner = 'pcbalad2020-coder';
   static const String _branch = 'main';
   static const String _token =
       String.fromEnvironment('GITHUB_TOKEN', defaultValue: '');
+
+  /// ⚠️ وسيط تصغير الصور (wsrv.nl) — مُعطَّل عمداً.
+  /// ثبت عملياً أنه غير قابل للوصول من شبكة هذا التطبيق، وعند تفعيله كانت
+  /// طلبات الصور «تتعلّق بلا رد» فتبقى الشاشة في وضع تحميل دائم.
+  /// لا تفعّله إلا بعد التأكد من عمله فعلياً على الشبكة المستهدفة.
+  static const bool _useThumbProxy = false;
 
   static const Map<String, String> repositories = {
     'All Images': 'All-images',
@@ -911,65 +861,54 @@ class GitHubService {
     '16:9 Ratio': 'imag-16-9',
   };
 
+  // كاش النماذج لكل قسم (رخيص — لا يسبب طلبات شبكة)
   static final Map<String, List<WallpaperModel>> _cache = {};
   static final Map<String, DateTime> _cacheTimestamps = {};
-  // ✅ رفعنا مدة الكاش من ساعتين إلى 6 ساعات لتقليل عدد الطلبات لأي مصدر
-  // (يقلل احتمال الاصطدام بأي حد استخدام مستقبلاً بدون أي أثر ملحوظ على
-  // حداثة المحتوى، لأن الصور لا تتغيّر كل دقيقة).
+
+  // كاش قوائم الملفات لكل مستودع (هذا هو ما يوفّر طلبات الشبكة فعلياً)
+  static final Map<String, List<Map<String, dynamic>>> _fileCache = {};
+  static final Map<String, DateTime> _fileCacheTimestamps = {};
+  static final Map<String, Future<List<Map<String, dynamic>>>> _inFlight = {};
+
+  // كاش مستقبلات الواجهة — يمنع إنشاء Future جديد داخل كل build
+  static final Map<String, Future<List<WallpaperModel>>> _uiFutures = {};
+
   static const Duration _cacheDuration = Duration(hours: 6);
 
-  // ✅ مهلات أطول لتحمّل الشبكات البطيئة/غير المستقرة
   static final Dio _dio = Dio(BaseOptions(
     baseUrl: 'https://api.github.com',
-    connectTimeout: const Duration(seconds: 30),
-    receiveTimeout: const Duration(seconds: 45),
+    // ✅ مهلات قصيرة: الهدف اكتشاف الفشل بسرعة والانتقال للمصدر البديل،
+    // لا انتظار 30 ثانية لكل مصدر (كان يجمّد بقية الأقسام في الطابور).
+    connectTimeout: const Duration(seconds: 12),
+    receiveTimeout: const Duration(seconds: 25),
     headers: {
       'Accept': 'application/vnd.github.v3+json',
-      'User-Agent': 'KM2-Wallpaper-App/1.2.0',
+      'User-Agent': 'KM2-Wallpaper-App/1.3.0',
       if (_token.isNotEmpty) 'Authorization': 'Bearer $_token',
     },
   ));
 
-  // ✅ عميل منفصل خاص بـ jsDelivr Data API — هذا هو المصدر الأساسي الجديد
-  // لقائمة الملفات. سبب المشكلة في اللوج (403 من api.github.com) هو أن
-  // GitHub REST API يسمح فقط بـ 60 طلب/ساعة لكل عنوان IP عند عدم استخدام
-  // توكن مصادقة (وهذا التطبيق لا يحمل توكن افتراضياً). بما أن كل فئة
-  // (Sport, Nature, Space...) وكل شاشة تفتح تطلب من api.github.com، هذا الحد
-  // ينتهي بسرعة خصوصاً لو عدة مستخدمين خلف نفس عنوان IP (شبكة جوال/واي فاي
-  // مشتركة). jsDelivr يقدّم نفس البيانات (قائمة الملفات) عبر خدمته المجانية
-  // كـ CDN بحدود استخدام أعلى بكثير ولا يتطلب أي مصادقة إطلاقاً.
   static final Dio _jsDelivrDio = Dio(BaseOptions(
     baseUrl: 'https://data.jsdelivr.com',
-    connectTimeout: const Duration(seconds: 30),
-    receiveTimeout: const Duration(seconds: 45),
+    connectTimeout: const Duration(seconds: 12),
+    receiveTimeout: const Duration(seconds: 25),
     headers: {
       'Accept': 'application/json',
-      'User-Agent': 'KM2-Wallpaper-App/1.2.0',
+      'User-Agent': 'KM2-Wallpaper-App/1.3.0',
     },
   ));
 
-  /// ✅ يحوّل مسار ملف داخل مستودع GitHub إلى رابط jsDelivr CDN.
-  /// jsDelivr يخدم أي ملف عام على GitHub عبر شبكة توزيع عالمية،
-  /// وهذا يحل مشاكل عدم ظهور الصور على أجهزة/شبكات معينة بسبب:
-  /// - Rate limiting الخاص بـ raw.githubusercontent.com / api.github.com
-  /// - حجب أو بطء الوصول لنطاقات GitHub في بعض الدول/الشبكات
-  /// ⚠️ ملاحظة مهمة: jsDelivr يرفض التعامل نهائياً (403) مع أي مستودع
-  /// يتجاوز حجمه الإجمالي 50 ميجابايت — هذا حد ثابت من jsDelivr نفسه ولا
-  /// يمكن رفعه. لهذا نستخدم _toRawGithub كخطة بديلة للمستودعات الكبيرة.
+  /// ✅ رابط الصورة عبر jsDelivr CDN — هذا هو المسار المعتمد للصور.
   static String _toJsDelivr({
     required String owner,
     required String repo,
     required String branch,
     required String path,
   }) {
-    // ترميز كل جزء من المسار بشكل صحيح (أسماء ملفات عربية/مسافات ... الخ)
     final encodedPath = path.split('/').map(Uri.encodeComponent).join('/');
     return 'https://cdn.jsdelivr.net/gh/$owner/$repo@$branch/$encodedPath';
   }
 
-  /// ✅ رابط بديل مباشر من GitHub نفسه (raw.githubusercontent.com) — لا يوجد
-  /// عليه حد الـ50 ميجابايت الإجمالي الخاص بـ jsDelivr، لذا نستخدمه تحديداً
-  /// للمستودعات الكبيرة (مثل All-images و imag-16-9) التي يرفضها jsDelivr.
   static String _toRawGithub({
     required String owner,
     required String repo,
@@ -980,8 +919,98 @@ class GitHubService {
     return 'https://raw.githubusercontent.com/$owner/$repo/$branch/$encodedPath';
   }
 
-  /// ✅ المصدر الأساسي الجديد لقائمة الملفات — jsDelivr Data API (طلب واحد
-  /// فقط، بدون أي مصادقة، وبدون الاصطدام بحد الـ60 طلب/ساعة الخاص بـ GitHub).
+  /// ✅ رابط مصغّر مضغوط (webp) بعرض محدد — يقلّل حجم الصورة من عدة ميغابايت
+  /// إلى عشرات الكيلوبايت في الشبكات والقوائم.
+  /// نتيجة فحص الوسيط: يبدأ معطلاً ولا يُفعَّل إلا بعد نجاح فحص حقيقي.
+  static bool _thumbProxyReady = false;
+  static bool get isThumbProxyReady => _thumbProxyReady;
+
+  /// ✅ يختبر الوسيط بصورة صغيرة جداً بمهلة 5 ثوانٍ. إن لم يستجب نبقى على
+  /// الروابط الأصلية — هذا يمنع الحالة الأسوأ: طلب صورة «معلّق بلا خطأ»
+  /// يترك الشاشة في وضع تحميل دائم لأن errorWidget لا يُستدعى أبداً.
+  static Future<void> probeThumbProxy() async {
+    if (!_useThumbProxy) {
+      AppLogger.info('🖼️ Thumb proxy disabled by config');
+      return;
+    }
+    try {
+      final probeDio = Dio(BaseOptions(
+        connectTimeout: const Duration(seconds: 5),
+        receiveTimeout: const Duration(seconds: 5),
+        responseType: ResponseType.bytes,
+      ));
+      const sample =
+          'https://raw.githubusercontent.com/$_owner/nature/$_branch/1.jpg';
+      final res = await probeDio.get(
+        'https://wsrv.nl/?url=${Uri.encodeComponent(sample)}&w=32&output=webp&q=40',
+      );
+      final bytes = res.data as List?;
+      _thumbProxyReady = res.statusCode == 200 && (bytes?.isNotEmpty ?? false);
+      AppLogger.success(_thumbProxyReady
+          ? '🖼️ Thumb proxy OK — سيتم عرض مصغّرات مضغوطة'
+          : '🖼️ Thumb proxy unavailable — استخدام الروابط الأصلية');
+    } catch (e) {
+      _thumbProxyReady = false;
+      AppLogger.warning('🖼️ Thumb proxy probe failed: $e — using direct URLs');
+    }
+  }
+
+  static String thumbUrl(String url, {int width = 400}) {
+    if (!_useThumbProxy || !_thumbProxyReady || url.isEmpty) return url;
+    // maxage=1y يبقي النسخة المصغّرة على شبكة الوسيط فيكون الطلب التالي
+    // لأي مستخدم فورياً. we = لا تكبّر الصور الأصغر من العرض المطلوب.
+    return 'https://wsrv.nl/?url=${Uri.encodeComponent(url)}'
+        '&w=$width&output=webp&q=72&we&maxage=1y';
+  }
+
+  /// عميل مخصص لجلب ملف القائمة الثابت من raw.githubusercontent
+  static final Dio _rawDio = Dio(BaseOptions(
+    connectTimeout: const Duration(seconds: 12),
+    receiveTimeout: const Duration(seconds: 25),
+    headers: {'User-Agent': 'KM2-Wallpaper-App/1.3.0'},
+  ));
+
+  /// ✅ المصدر الأول والأفضل: ملف `files.json` موضوع داخل كل مستودع ويحوي
+  /// أسماء الصور. مزاياه أنه:
+  ///  • بلا أي حد استخدام (ليس API بل ملف عادي) → لا خطأ 403 أبداً
+  ///  • بلا حد حجم المستودع → يعمل مع All-images و imag-16-9 اللذين يرفضهما
+  ///    jsDelivr لتجاوزهما 50 ميجابايت (وهذا سبب فراغ قسمي New/Best/16:9)
+  ///  • طلب واحد صغير جداً (بضعة كيلوبايت) → أسرع مصدر على الإطلاق
+  /// إن لم يوجد الملف في مستودع ما، ينتقل الكود للمصادر التالية تلقائياً.
+  static Future<List<Map<String, dynamic>>> _fetchViaManifest(
+      String repoName) async {
+    final url = _toRawGithub(
+        owner: _owner, repo: repoName, branch: _branch, path: 'files.json');
+    final response = await _rawDio.get(
+      url,
+      options: Options(responseType: ResponseType.plain),
+    );
+    if (response.statusCode != 200 || response.data == null) return [];
+
+    final decoded = jsonDecode(response.data.toString());
+    final rawList = decoded is List
+        ? decoded
+        : (decoded is Map ? (decoded['files'] as List? ?? []) : const []);
+
+    return rawList.map((e) => e.toString()).where((path) {
+      final lower = path.toLowerCase();
+      return lower.endsWith('.jpg') ||
+          lower.endsWith('.jpeg') ||
+          lower.endsWith('.png') ||
+          lower.endsWith('.webp');
+    }).map((path) {
+      final clean = path.startsWith('/') ? path.substring(1) : path;
+      return {
+        'name': clean.split('/').last,
+        'download_url': _toJsDelivr(
+            owner: _owner, repo: repoName, branch: _branch, path: clean),
+        'raw_url': _toRawGithub(
+            owner: _owner, repo: repoName, branch: _branch, path: clean),
+        'type': 'file',
+      };
+    }).toList();
+  }
+
   static Future<List<Map<String, dynamic>>> _fetchViaJsDelivr(
       String repoName) async {
     final response = await _jsDelivrDio.get(
@@ -997,13 +1026,18 @@ class GitHubService {
             name.endsWith('.png') ||
             name.endsWith('.webp');
       }).map((f) {
-        // jsDelivr يرجع المسار ببادئة "/" مثل "/folder/file.jpg"
         var path = f['name'] as String;
         if (path.startsWith('/')) path = path.substring(1);
         final filename = path.split('/').last;
         return {
           'name': filename,
           'download_url': _toJsDelivr(
+            owner: _owner,
+            repo: repoName,
+            branch: _branch,
+            path: path,
+          ),
+          'raw_url': _toRawGithub(
             owner: _owner,
             repo: repoName,
             branch: _branch,
@@ -1016,8 +1050,48 @@ class GitHubService {
     return [];
   }
 
-  /// ✅ المصدر الثاني (احتياطي) لقائمة الملفات: Git Trees API (طلب واحد فقط،
-  /// حتى لو كان هناك مئات الملفات) — بدل Contents API الذي كان يُستخدم أولاً.
+  /// ✅ مصدر إضافي لقائمة الملفات: نقطة jsDelivr «القديمة». تدعم أسماء
+  /// الفروع مباشرة (@main) وتنجح أحياناً حين تفشل النقطة الحديثة، وبلا أي
+  /// حد استخدام ولا مصادقة — وجودها يجعل GitHub API خطة أخيرة نادرة بدل
+  /// أن يكون المنقذ الوحيد (وهو محدود بـ 60 طلب/ساعة لكل IP → خطأ 403).
+  static Future<List<Map<String, dynamic>>> _fetchViaJsDelivrLegacy(
+      String repoName) async {
+    final response = await _jsDelivrDio.get(
+      '/v1/package/gh/$_owner/$repoName@$_branch/flat',
+    );
+    if (response.statusCode == 200 && response.data != null) {
+      final files = response.data['files'] as List? ?? [];
+      return files.where((f) {
+        final name = (f['name'] as String? ?? '').toLowerCase();
+        return name.endsWith('.jpg') ||
+            name.endsWith('.jpeg') ||
+            name.endsWith('.png') ||
+            name.endsWith('.webp');
+      }).map((f) {
+        var path = f['name'] as String;
+        if (path.startsWith('/')) path = path.substring(1);
+        final filename = path.split('/').last;
+        return {
+          'name': filename,
+          'download_url': _toJsDelivr(
+            owner: _owner,
+            repo: repoName,
+            branch: _branch,
+            path: path,
+          ),
+          'raw_url': _toRawGithub(
+            owner: _owner,
+            repo: repoName,
+            branch: _branch,
+            path: path,
+          ),
+          'type': 'file',
+        };
+      }).toList();
+    }
+    return [];
+  }
+
   static Future<List<Map<String, dynamic>>> _fetchViaTrees(
       String repoName) async {
     final response = await _dio.get(
@@ -1038,10 +1112,17 @@ class GitHubService {
         final filename = path.split('/').last;
         return {
           'name': filename,
-          // ✅ نصل هنا فقط إذا فشل jsDelivr مسبقاً لهذا المستودع (غالباً
-          // لأنه أكبر من حد الـ50MB الخاص به) — لذلك نستخدم الرابط الخام
-          // المباشر من GitHub بدل jsDelivr مرة أخرى (سيفشل أيضاً بنفس السبب).
-          'download_url': _toRawGithub(
+          // ⚠️ الإصلاح الحاسم: كانت هذه الخطة البديلة تبني روابط raw فقط،
+          // فأي مستودع فشلت قائمته عبر jsDelivr كانت صوره تأتي من نطاق آخر
+          // قد يكون محجوباً → القسم يظهر فارغاً رغم نجاح قراءة القائمة.
+          // الآن الرابط الأساسي jsDelivr دائماً، وraw احتياطي فقط.
+          'download_url': _toJsDelivr(
+            owner: _owner,
+            repo: repoName,
+            branch: _branch,
+            path: path,
+          ),
+          'raw_url': _toRawGithub(
             owner: _owner,
             repo: repoName,
             branch: _branch,
@@ -1054,10 +1135,6 @@ class GitHubService {
     return [];
   }
 
-  /// خطة بديلة (fallback) فقط إذا فشل Trees API — تستخدم Contents API،
-  /// وروابط الصور الناتجة منها تُبنى من raw.githubusercontent.com مباشرة
-  /// (لا jsDelivr، لأن الوصول لهذه الخطة يعني أن jsDelivr فشل أصلاً لهذا
-  /// المستودع — غالباً بسبب تجاوزه حد الـ50MB الخاص بـ jsDelivr).
   static Future<List<Map<String, dynamic>>> _fetchFromRepoContents(
       String repoName) async {
     final response = await _dio.get(
@@ -1076,7 +1153,13 @@ class GitHubService {
         final name = item['name'] as String;
         return {
           'name': name,
-          'download_url': _toRawGithub(
+          'download_url': _toJsDelivr(
+            owner: _owner,
+            repo: repoName,
+            branch: _branch,
+            path: name,
+          ),
+          'raw_url': _toRawGithub(
             owner: _owner,
             repo: repoName,
             branch: _branch,
@@ -1089,42 +1172,78 @@ class GitHubService {
     return [];
   }
 
-  /// ✅ نقطة الدخول الموحّدة لجلب الملفات: تجرب jsDelivr أولاً (لا حد استخدام
-  /// عملياً ولا مصادقة مطلوبة)، وإذا فشل لأي سبب تنتقل لـ GitHub Trees API
-  /// ثم Contents API كخطط احتياطية، مع تسجيل مفصّل لنوع الخطأ لتسهيل
-  /// التشخيص عبر تقارير المستخدمين.
   static Future<List<Map<String, dynamic>>> _fetchFiles(String repoName) async {
+    // المصدر الأول: ملف القائمة الثابت (إن وُجد) — الأسرع والأضمن
     try {
-      AppLogger.info('📥 Fetching (jsDelivr): $repoName');
-      final files = await _fetchViaJsDelivr(repoName);
-      if (files.isNotEmpty) return files;
-      AppLogger.warning(
-          '⚠️ jsDelivr returned empty for $repoName, trying GitHub trees API');
+      final manifest = await _fetchViaManifest(repoName);
+      if (manifest.isNotEmpty) {
+        AppLogger.success(
+            '✅ Manifest OK: $repoName (${manifest.length} files)');
+        return manifest;
+      }
+    } catch (e) {
+      AppLogger.info('ℹ️ No files.json in $repoName — using API sources');
+    }
+
+    for (int attempt = 1; attempt <= 2; attempt++) {
+      try {
+        AppLogger.info('📥 Fetching (jsDelivr) [$attempt/2]: $repoName');
+        final files = await _fetchViaJsDelivr(repoName);
+        if (files.isNotEmpty) {
+          AppLogger.success('✅ jsDelivr OK: $repoName (${files.length} files)');
+          return files;
+        }
+        AppLogger.warning('⚠️ jsDelivr returned empty for $repoName');
+        break;
+      } on DioException catch (e) {
+        AppLogger.warning(
+            '⚠️ jsDelivr failed for $repoName | type=${e.type} | status=${e.response?.statusCode}');
+        // connectionError = فشل DNS/اتصال من الجهاز نفسه — تستحق محاولة ثانية
+        final worthRetry = e.type == DioExceptionType.connectionError ||
+            e.type == DioExceptionType.connectionTimeout;
+        if (attempt == 1 && worthRetry) {
+          await Future.delayed(const Duration(milliseconds: 900));
+          continue;
+        }
+        break;
+      } catch (e) {
+        AppLogger.warning('⚠️ jsDelivr unexpected error for $repoName: $e');
+        break;
+      }
+    }
+    // مصدر ثانٍ: نقطة jsDelivr القديمة — بلا حد استخدام، تُجرَّب قبل GitHub
+    try {
+      final legacy = await _fetchViaJsDelivrLegacy(repoName);
+      if (legacy.isNotEmpty) {
+        AppLogger.success(
+            '✅ jsDelivr legacy OK: $repoName (${legacy.length} files)');
+        return legacy;
+      }
+      AppLogger.warning('⚠️ jsDelivr legacy returned empty for $repoName');
     } on DioException catch (e) {
       AppLogger.warning(
-          '⚠️ jsDelivr failed for $repoName | type=${e.type} | status=${e.response?.statusCode} | msg=${e.message}');
+          '⚠️ jsDelivr legacy failed for $repoName | type=${e.type} | status=${e.response?.statusCode}');
     } catch (e) {
-      AppLogger.warning('⚠️ jsDelivr unexpected error for $repoName: $e');
+      AppLogger.warning(
+          '⚠️ jsDelivr legacy unexpected error for $repoName: $e');
     }
+
+    AppLogger.info('↪️ Falling back to GitHub API for: $repoName');
 
     try {
       final files = await _fetchViaTrees(repoName);
-      if (files.isNotEmpty) return files;
-      AppLogger.warning(
-          '⚠️ Trees API returned empty for $repoName, trying contents API');
+      if (files.isNotEmpty) {
+        AppLogger.success('✅ GitHub trees OK: $repoName (${files.length})');
+        return files;
+      }
       return await _fetchFromRepoContents(repoName);
     } on DioException catch (e) {
       AppLogger.warning(
-          '⚠️ Trees API failed for $repoName | type=${e.type} | status=${e.response?.statusCode} | msg=${e.message}');
+          '⚠️ Trees API failed for $repoName | type=${e.type} | status=${e.response?.statusCode}');
       try {
         return await _fetchFromRepoContents(repoName);
-      } on DioException catch (e2) {
-        AppLogger.error(
-            '❌ Contents API also failed for $repoName | type=${e2.type} | status=${e2.response?.statusCode} | msg=${e2.message}');
-        return [];
       } catch (err) {
-        AppLogger.error(
-            '❌ Unexpected error in contents fallback for $repoName: $err');
+        AppLogger.error('❌ Contents API also failed for $repoName: $err');
         return [];
       }
     } catch (e) {
@@ -1133,27 +1252,88 @@ class GitHubService {
     }
   }
 
+  // ✅ حدّ أقصى 3 طلبات متزامنة: الرئيسية كانت تفتح 7 طلبات دفعة واحدة
+  // (مستودع لكل قسم) فتفشل بعضها على الشبكات الضعيفة أو تتأخر جداً.
+  static int _activeFetches = 0;
+  static const int _maxConcurrentFetches = 4;
+  static final List<Completer<void>> _fetchQueue = [];
+
+  static Future<void> _acquireSlot() {
+    if (_activeFetches < _maxConcurrentFetches) {
+      _activeFetches++;
+      return Future.value();
+    }
+    final completer = Completer<void>();
+    _fetchQueue.add(completer);
+    return completer.future;
+  }
+
+  static void _releaseSlot() {
+    if (_fetchQueue.isNotEmpty) {
+      _fetchQueue.removeAt(0).complete();
+    } else if (_activeFetches > 0) {
+      _activeFetches--;
+    }
+  }
+
+  /// جلب قائمة ملفات المستودع مع كاش ومنع الطلبات المتزامنة المكررة
+  static Future<List<Map<String, dynamic>>> _getFiles(String repoName) {
+    final ts = _fileCacheTimestamps[repoName];
+    if (ts != null &&
+        DateTime.now().difference(ts) < _cacheDuration &&
+        _fileCache[repoName] != null) {
+      return Future.value(_fileCache[repoName]!);
+    }
+    final existing = _inFlight[repoName];
+    if (existing != null) return existing;
+
+    final future =
+        _acquireSlot().then((_) => _fetchFiles(repoName)).then((files) {
+      if (files.isNotEmpty) {
+        _fileCache[repoName] = files;
+        _fileCacheTimestamps[repoName] = DateTime.now();
+      } else {
+        AppLogger.warning('⚠️ No files returned for repo: $repoName');
+      }
+      return files;
+    }).whenComplete(() {
+      _releaseSlot();
+      _inFlight.remove(repoName);
+    });
+
+    _inFlight[repoName] = future;
+    return future;
+  }
+
   static Future<List<WallpaperModel>> getWallpapers(String categoryName) async {
-    if (_cache.containsKey(categoryName) &&
-        _cacheTimestamps.containsKey(categoryName)) {
-      final age = DateTime.now().difference(_cacheTimestamps[categoryName]!);
-      if (age < _cacheDuration) return _cache[categoryName]!;
+    final cachedAt = _cacheTimestamps[categoryName];
+    if (cachedAt != null &&
+        _cache[categoryName] != null &&
+        DateTime.now().difference(cachedAt) < _cacheDuration) {
+      return _cache[categoryName]!;
     }
 
     final repoName = repositories[categoryName];
     if (repoName == null) return [];
 
-    final files = await _fetchFiles(repoName);
+    final files = await _getFiles(repoName);
     final is169 = categoryName == '16:9' || categoryName == '16:9 Ratio';
     final wallpapers = files.map((file) {
       final name = file['name'] as String? ?? 'unnamed';
-      final downloadUrl = file['download_url'] as String? ?? '';
+      final jsDelivrUrl = file['download_url'] as String? ?? '';
+      final rawUrl = file['raw_url'] as String? ?? '';
+      // ✅ عكس الأولوية بناءً على قياس فعلي: روابط cdn.jsdelivr.net كانت
+      // «تتعلّق بلا رد» على شبكة المستخدم (سطور ⌛ Image stalled في اللوج)
+      // بينما raw.githubusercontent استجاب فوراً. لذا raw هو الأساسي الآن
+      // و jsDelivr الاحتياطي — والعكس يحدث تلقائياً إن تعطّل raw يوماً.
+      final primaryUrl = rawUrl.isNotEmpty ? rawUrl : jsDelivrUrl;
+      final secondaryUrl = rawUrl.isNotEmpty ? jsDelivrUrl : '';
       return WallpaperModel(
         id: '${repoName}_$name',
         title: name.replaceAll(
             RegExp(r'\.(jpg|jpeg|png|webp)$', caseSensitive: false), ''),
-        imageUrl: downloadUrl,
-        thumbnailUrl: downloadUrl,
+        imageUrl: primaryUrl,
+        fallbackUrl: secondaryUrl,
         category: categoryName,
         repository: repoName,
         width: is169 ? 1920 : 1080,
@@ -1163,19 +1343,50 @@ class GitHubService {
     }).toList()
       ..shuffle(Random());
 
-    _cache[categoryName] = wallpapers;
-    _cacheTimestamps[categoryName] = DateTime.now();
+    // ✅ لا نخزّن نتيجة فارغة: كان الفشل المؤقت (انقطاع لحظي عند الإقلاع)
+    // يُخزَّن 6 ساعات فيبقى القسم فارغاً حتى لو عاد الإنترنت.
+    if (wallpapers.isNotEmpty) {
+      _cache[categoryName] = wallpapers;
+      _cacheTimestamps[categoryName] = DateTime.now();
+    }
     return wallpapers;
+  }
+
+  /// ✅ تُستخدم داخل build بدل getWallpapers مباشرة — نفس المستقبل يُعاد
+  /// استخدامه فلا يحدث طلب/وميض جديد مع كل إعادة بناء للواجهة.
+  static Future<List<WallpaperModel>> futureOf(String categoryName) {
+    final existing = _uiFutures[categoryName];
+    if (existing != null) return existing;
+
+    // ✅ المستقبل يُحفظ فقط عند النجاح. لو رجع فارغاً أو رمى خطأ نحذفه فوراً
+    // حتى تُعاد المحاولة تلقائياً في أول إعادة بناء أو سحب للتحديث.
+    final future = getWallpapers(categoryName).then((list) {
+      if (list.isEmpty) _uiFutures.remove(categoryName);
+      return list;
+    }).catchError((Object e) {
+      AppLogger.error('❌ futureOf($categoryName) failed: $e');
+      _uiFutures.remove(categoryName);
+      return <WallpaperModel>[];
+    });
+
+    _uiFutures[categoryName] = future;
+    return future;
   }
 
   static void clearCache() {
     _cache.clear();
     _cacheTimestamps.clear();
+    _fileCache.clear();
+    _fileCacheTimestamps.clear();
+    _uiFutures.clear();
   }
 
   static Future<bool> testConnection() async {
     try {
-      final response = await _dio.get('/rate_limit');
+      final response = await _jsDelivrDio.get(
+        '/v1/packages/gh/$_owner/nature@$_branch',
+        queryParameters: {'structure': 'flat'},
+      );
       return response.statusCode == 200;
     } catch (e) {
       AppLogger.error('❌ testConnection failed: $e');
@@ -1185,7 +1396,7 @@ class GitHubService {
 }
 
 // =============================================================================
-// 3. COINS PROVIDER (نظام العملات)
+// 3. COINS PROVIDER
 // =============================================================================
 class CoinsProvider with ChangeNotifier {
   int _coins = 0;
@@ -1201,10 +1412,9 @@ class CoinsProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  // ✅ إضافة عملات ترحيبية عند أول فتح
   Future<void> giveWelcomeBonus() async {
     if (!_hasReceivedWelcomeBonus) {
-      _coins += 50; // 🎁 عدد العملات الترحيبية (يمكنك تغييره)
+      _coins += 50;
       _hasReceivedWelcomeBonus = true;
       await _save();
       notifyListeners();
@@ -1214,15 +1424,15 @@ class CoinsProvider with ChangeNotifier {
 
   Future<void> addCoins(int amount) async {
     _coins += amount;
-    await _save();
     notifyListeners();
+    await _save();
   }
 
   Future<bool> deductCoins(int amount) async {
     if (_coins >= amount) {
       _coins -= amount;
-      await _save();
       notifyListeners();
+      await _save();
       return true;
     }
     return false;
@@ -1237,12 +1447,23 @@ class CoinsProvider with ChangeNotifier {
 
 // =============================================================================
 // 4. DOWNLOAD SERVICE
+// -----------------------------------------------------------------------------
+// ✅ إصلاح: العملات كانت تُخصم قبل بدء التحميل ولا تُعاد عند الفشل.
+// الآن الخصم يتم فقط بعد نجاح الحفظ في المعرض.
 // =============================================================================
 class DownloadService {
+  static const int downloadCost = 10;
+
   static Future<void> downloadWallpaper(
     BuildContext context,
     WallpaperModel wallpaper,
   ) async {
+    final coinsProvider = Provider.of<CoinsProvider>(context, listen: false);
+    if (coinsProvider.coins < downloadCost) {
+      showInsufficientCoinsDialog(context);
+      return;
+    }
+
     final hasPermission = await _requestStoragePermission(context);
     if (!hasPermission) {
       if (context.mounted) {
@@ -1251,6 +1472,9 @@ class DownloadService {
             content: Text('❌ يحتاج التطبيق إلى إذن الصور للحفظ',
                 style: AppFonts.poppins()),
             backgroundColor: Colors.orange[800],
+            behavior: SnackBarBehavior.floating,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             duration: const Duration(seconds: 4),
             action: SnackBarAction(
                 label: 'الإعدادات',
@@ -1262,39 +1486,47 @@ class DownloadService {
       return;
     }
 
-    // ✅ خصم العملات قبل بدء التحميل
-    final coinsProvider = Provider.of<CoinsProvider>(context, listen: false);
-    if (coinsProvider.coins < 10) {
-      if (context.mounted) showInsufficientCoinsDialog(context);
-      return;
-    }
+    if (!context.mounted) return;
 
-    await coinsProvider.deductCoins(10);
-    if (context.mounted) {
+    final success = await showDialog<bool>(
+          context: context,
+          barrierDismissible: false,
+          builder: (_) => _DownloadProgressDialog(wallpaper: wallpaper),
+        ) ??
+        false;
+
+    if (!context.mounted) return;
+
+    if (success) {
+      await coinsProvider.deductCoins(downloadCost);
+      if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('تم خصم 10 عملات 🪙 | الرصيد: ${coinsProvider.coins}',
+          content: Text(
+              'تم الحفظ ✅ | خُصمت $downloadCost عملات — الرصيد: ${coinsProvider.coins} 🪙',
               style: AppFonts.poppins()),
-          backgroundColor: Colors.orange[800],
+          backgroundColor: Colors.green[700],
           behavior: SnackBarBehavior.floating,
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          duration: const Duration(seconds: 2),
+          duration: const Duration(seconds: 3),
         ),
       );
-    }
-
-    if (context.mounted) {
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (_) => _DownloadProgressDialog(wallpaper: wallpaper),
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('لم يكتمل التحميل — لم تُخصم أي عملات',
+              style: AppFonts.poppins()),
+          backgroundColor: Colors.red[700],
+          behavior: SnackBarBehavior.floating,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
       );
     }
   }
 
   static Future<bool> _requestStoragePermission(BuildContext context) async {
-    // ✅ إذا كان الإذن ممنوحاً مسبقاً، لا داعي لأي حوار إطلاقاً.
     if (await GalleryPermission.isGranted()) return true;
 
     final result = await GalleryPermission.requestOnce();
@@ -1330,25 +1562,35 @@ class _DownloadProgressDialogState extends State<_DownloadProgressDialog> {
   }
 
   Future<void> _startDownload() async {
+    String? savePath;
     try {
       final tempDir = await getTemporaryDirectory();
       final safeTitle =
           widget.wallpaper.title.replaceAll(RegExp(r'[^\w\u0600-\u06FF]'), '_');
       final fileName =
           '${safeTitle}_${DateTime.now().millisecondsSinceEpoch}.jpg';
-      final savePath = '${tempDir.path}/$fileName';
+      savePath = '${tempDir.path}/$fileName';
       final dio = Dio(BaseOptions(
           connectTimeout: const Duration(seconds: 30),
           receiveTimeout: const Duration(seconds: 120)));
 
-      await dio.download(
-        widget.wallpaper.imageUrl,
-        savePath,
-        onReceiveProgress: (received, total) {
-          if (total != -1 && mounted)
-            setState(() => _progress = received / total);
-        },
-      );
+      void onProgress(int received, int total) {
+        if (total != -1 && mounted) {
+          setState(() => _progress = received / total);
+        }
+      }
+
+      try {
+        await dio.download(widget.wallpaper.imageUrl, savePath,
+            onReceiveProgress: onProgress);
+      } catch (e) {
+        // ✅ إعادة المحاولة بالنطاق الآخر بدل إظهار فشل مباشر
+        final alt = widget.wallpaper.fallbackUrl;
+        if (alt.isEmpty || alt == widget.wallpaper.imageUrl) rethrow;
+        AppLogger.warning('⚠️ Download failed, retrying via fallback URL');
+        if (mounted) setState(() => _progress = 0);
+        await dio.download(alt, savePath, onReceiveProgress: onProgress);
+      }
 
       final result = await SaverGallery.saveFile(
         file: savePath,
@@ -1360,25 +1602,29 @@ class _DownloadProgressDialogState extends State<_DownloadProgressDialog> {
       final tempFile = File(savePath);
       if (await tempFile.exists()) await tempFile.delete();
 
-      if (mounted) {
-        setState(() {
-          _done = result.isSuccess;
-          _error = !result.isSuccess;
-          _status = result.isSuccess ? 'تم الحفظ في المعرض ✅' : 'فشل الحفظ ❌';
-        });
-        await Future.delayed(const Duration(seconds: 2));
-        if (mounted) Navigator.of(context).pop();
-      }
+      if (!mounted) return;
+      setState(() {
+        _done = result.isSuccess;
+        _error = !result.isSuccess;
+        _status = result.isSuccess ? 'تم الحفظ في المعرض ✅' : 'فشل الحفظ ❌';
+      });
+      await Future.delayed(const Duration(milliseconds: 1200));
+      if (mounted) Navigator.of(context).pop(result.isSuccess);
     } catch (e) {
       AppLogger.error('❌ Download failed for ${widget.wallpaper.imageUrl}: $e');
-      if (mounted) {
-        setState(() {
-          _error = true;
-          _status = 'خطأ: $e';
-        });
-        await Future.delayed(const Duration(seconds: 3));
-        if (mounted) Navigator.of(context).pop();
+      if (savePath != null) {
+        try {
+          final f = File(savePath);
+          if (await f.exists()) await f.delete();
+        } catch (_) {}
       }
+      if (!mounted) return;
+      setState(() {
+        _error = true;
+        _status = 'تعذّر التحميل، تحقق من الاتصال';
+      });
+      await Future.delayed(const Duration(seconds: 2));
+      if (mounted) Navigator.of(context).pop(false);
     }
   }
 
@@ -1456,12 +1702,30 @@ class AppProvider with ChangeNotifier {
   }
 }
 
+/// عنصر محذوف من المفضلة مع موقعه الأصلي (لدعم التراجع)
+class RemovedFavorite {
+  final int index;
+  final WallpaperModel wallpaper;
+  const RemovedFavorite(this.index, this.wallpaper);
+}
+
 class FavoritesProvider with ChangeNotifier {
   final Set<String> _favoriteIds = {};
   final List<WallpaperModel> _favorites = [];
+
   Set<String> get favoriteIds => _favoriteIds;
   List<WallpaperModel> get favorites => List.unmodifiable(_favorites);
+  int get count => _favorites.length;
   bool isFavorite(String id) => _favoriteIds.contains(id);
+
+  List<String> get categories {
+    final set = <String>{};
+    for (final w in _favorites) {
+      if (w.category.trim().isNotEmpty) set.add(w.category);
+    }
+    final list = set.toList()..sort();
+    return list;
+  }
 
   Future<void> load() async {
     final prefs = await SharedPreferences.getInstance();
@@ -1471,8 +1735,7 @@ class FavoritesProvider with ChangeNotifier {
     for (final jsonStr in jsonList) {
       try {
         final w = WallpaperModel.fromJson(jsonDecode(jsonStr));
-        _favorites.add(w);
-        _favoriteIds.add(w.id);
+        if (_favoriteIds.add(w.id)) _favorites.add(w);
       } catch (_) {}
     }
     notifyListeners();
@@ -1486,8 +1749,54 @@ class FavoritesProvider with ChangeNotifier {
       _favoriteIds.add(wallpaper.id);
       _favorites.insert(0, wallpaper);
     }
-    await _save();
     notifyListeners();
+    await _save();
+  }
+
+  /// حذف مجموعة صور مع إرجاع مواقعها الأصلية حتى يمكن التراجع
+  Future<List<RemovedFavorite>> removeMany(Set<String> ids) async {
+    if (ids.isEmpty) return const [];
+    final removed = <RemovedFavorite>[];
+    for (int i = _favorites.length - 1; i >= 0; i--) {
+      final w = _favorites[i];
+      if (ids.contains(w.id)) {
+        removed.add(RemovedFavorite(i, w));
+        _favorites.removeAt(i);
+        _favoriteIds.remove(w.id);
+      }
+    }
+    removed.sort((a, b) => a.index.compareTo(b.index));
+    notifyListeners();
+    await _save();
+    return removed;
+  }
+
+  /// إعادة الصور المحذوفة إلى مواقعها الأصلية
+  Future<void> restore(List<RemovedFavorite> items) async {
+    if (items.isEmpty) return;
+    final sorted = [...items]..sort((a, b) => a.index.compareTo(b.index));
+    for (final item in sorted) {
+      if (_favoriteIds.contains(item.wallpaper.id)) continue;
+      final index =
+          item.index < _favorites.length ? item.index : _favorites.length;
+      _favorites.insert(index, item.wallpaper);
+      _favoriteIds.add(item.wallpaper.id);
+    }
+    notifyListeners();
+    await _save();
+  }
+
+  Future<List<RemovedFavorite>> clearAll() async {
+    final snapshot = <RemovedFavorite>[
+      for (int i = 0; i < _favorites.length; i++)
+        RemovedFavorite(i, _favorites[i]),
+    ];
+    _favorites.clear();
+    _favoriteIds.clear();
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('favorites');
+    return snapshot;
   }
 
   Future<void> _save() async {
@@ -1495,19 +1804,12 @@ class FavoritesProvider with ChangeNotifier {
     await prefs.setStringList(
         'favorites', _favorites.map((w) => jsonEncode(w.toJson())).toList());
   }
-
-  Future<void> clearAll() async {
-    _favoriteIds.clear();
-    _favorites.clear();
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('favorites');
-    notifyListeners();
-  }
 }
 
 class PrivacyProvider with ChangeNotifier {
   bool _accepted = false;
   bool get accepted => _accepted;
+
   Future<void> load() async {
     final prefs = await SharedPreferences.getInstance();
     _accepted = prefs.getBool('privacy_accepted') ?? false;
@@ -1516,35 +1818,46 @@ class PrivacyProvider with ChangeNotifier {
 
   Future<void> accept() async {
     _accepted = true;
+    notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('privacy_accepted', true);
-    notifyListeners();
   }
 }
 
 // =============================================================================
-// HELPER FUNCTIONS (دوال مساعدة للعملات والإعلانات)
+// HELPER FUNCTIONS
 // =============================================================================
 void watchAdForCoins(BuildContext context) {
+  final messenger = ScaffoldMessenger.of(context);
   AdMobManager().showRewardedAd(
     onUserEarnedReward: (ad, reward) async {
       final coinsProvider = Provider.of<CoinsProvider>(context, listen: false);
       await coinsProvider.addCoins(5);
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-                '🎉 حصلت على 5 عملات! رصيدك: ${coinsProvider.coins} 🪙',
-                style: AppFonts.poppins()),
-            backgroundColor: Colors.green[700],
-            behavior: SnackBarBehavior.floating,
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          ),
-        );
-      }
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('🎉 حصلت على 5 عملات! رصيدك: ${coinsProvider.coins} 🪙',
+              style: AppFonts.poppins()),
+          backgroundColor: Colors.green[700],
+          behavior: SnackBarBehavior.floating,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+      );
     },
     onAdDismissed: () {},
+    // ✅ إصلاح: كان الزر لا يفعل شيئاً إذا لم يكن الإعلان جاهزاً
+    onAdNotReady: () {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('الإعلان غير جاهز بعد، حاول بعد لحظات',
+              style: AppFonts.poppins()),
+          backgroundColor: Colors.orange[800],
+          behavior: SnackBarBehavior.floating,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+      );
+    },
   );
 }
 
@@ -1686,7 +1999,7 @@ class GlassContainer extends StatelessWidget {
   const GlassContainer(
       {super.key,
       required this.child,
-      this.blur = 12.0,
+      this.blur = 10.0,
       this.opacity = 0.08,
       this.padding = EdgeInsets.zero,
       this.borderRadius = const BorderRadius.all(Radius.circular(20))});
@@ -1708,6 +2021,138 @@ class GlassContainer extends StatelessWidget {
       ),
     );
   }
+}
+
+/// ✅ بديل خفيف للزجاج بدون BackdropFilter — يُستخدم في القوائم الطويلة
+/// (الإعدادات مثلاً) حيث كان الضباب يستهلك إطارات كثيرة على الأجهزة المتوسطة.
+class SolidPanel extends StatelessWidget {
+  final Widget child;
+  final EdgeInsetsGeometry padding;
+  final double radius;
+  const SolidPanel(
+      {super.key,
+      required this.child,
+      this.padding = EdgeInsets.zero,
+      this.radius = 16});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: padding,
+      decoration: BoxDecoration(
+        color: const Color(0xFF16202C),
+        borderRadius: BorderRadius.circular(radius),
+        border: Border.all(color: const Color(0x1FFFFFFF)),
+      ),
+      child: child,
+    );
+  }
+}
+
+/// ✅ صورة شبكية مع تراجع تلقائي: إذا فشل رابط المصغّر (وسيط خارجي محجوب
+/// مثلاً) تُجرَّب الصورة الأصلية بدل ترك مكان فارغ أو تحميل لا ينتهي.
+class NetImage extends StatefulWidget {
+  final String url;
+  final String fallbackUrl;
+  final int? memWidth;
+  final BoxFit fit;
+  const NetImage({
+    super.key,
+    required this.url,
+    this.fallbackUrl = '',
+    this.memWidth,
+    this.fit = BoxFit.cover,
+  });
+
+  @override
+  State<NetImage> createState() => _NetImageState();
+}
+
+class _NetImageState extends State<NetImage> {
+  Timer? _watchdog;
+  bool _useFallback = false;
+
+  String get _primary =>
+      widget.url.isNotEmpty ? widget.url : widget.fallbackUrl;
+  bool get _hasFallback =>
+      widget.fallbackUrl.isNotEmpty && widget.fallbackUrl != _primary;
+
+  @override
+  void initState() {
+    super.initState();
+    _startWatchdog();
+  }
+
+  @override
+  void didUpdateWidget(covariant NetImage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.url != widget.url ||
+        oldWidget.fallbackUrl != widget.fallbackUrl) {
+      _watchdog?.cancel();
+      _useFallback = false;
+      _startWatchdog();
+    }
+  }
+
+  /// ✅ حارس زمني: أخطر حالة ليست فشل الرابط بل تعليقه بلا رد — عندها لا
+  /// يُستدعى errorWidget إطلاقاً وتبقى الشاشة في وضع تحميل للأبد. بعد 7
+  /// ثوانٍ بلا صورة ننتقل تلقائياً إلى الرابط الأصلي المباشر.
+  void _startWatchdog() {
+    if (!_hasFallback) return;
+    _watchdog = Timer(const Duration(seconds: 5), () {
+      if (!mounted || _useFallback) return;
+      AppLogger.warning('⌛ Image stalled, switching to direct URL: $_primary');
+      setState(() => _useFallback = true);
+    });
+  }
+
+  void _cancelWatchdog() {
+    _watchdog?.cancel();
+    _watchdog = null;
+  }
+
+  @override
+  void dispose() {
+    _cancelWatchdog();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final url = _useFallback ? widget.fallbackUrl : _primary;
+    return CachedNetworkImage(
+      imageUrl: url,
+      fit: widget.fit,
+      memCacheWidth: widget.memWidth,
+      // ✅ أُزيل maxWidthDiskCache: كان يعيد ترميز كل صورة قبل حفظها على
+      // القرص، وهو عمل ثقيل على المعالج ظهر في اللوج كـ 856 إطاراً مفقوداً.
+      // memCacheWidth وحده يكفي للتحكم في الذاكرة.
+      fadeInDuration: const Duration(milliseconds: 120),
+      imageBuilder: (context, provider) {
+        _cancelWatchdog();
+        return Image(image: provider, fit: widget.fit);
+      },
+      placeholder: (_, __) => const ShimmerLoadingCard(),
+      errorWidget: (context, failedUrl, error) {
+        AppLogger.error('❌ Image failed: $failedUrl | $error');
+        if (!_useFallback && _hasFallback) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) setState(() => _useFallback = true);
+          });
+          return const ShimmerLoadingCard();
+        }
+        return const ImageErrorBox();
+      },
+    );
+  }
+}
+
+class ImageErrorBox extends StatelessWidget {
+  const ImageErrorBox({super.key});
+  @override
+  Widget build(BuildContext context) => const ColoredBox(
+      color: Color(0xFF20262E),
+      child: Center(child: Icon(Icons.broken_image, color: Colors.grey)));
 }
 
 class ShimmerLoadingCard extends StatelessWidget {
@@ -1735,16 +2180,15 @@ class FavoriteButton extends StatelessWidget {
         final isFav = favProvider.isFavorite(wallpaper.id);
         return GestureDetector(
           onTap: () async {
+            final messenger = ScaffoldMessenger.of(context);
             await favProvider.toggle(wallpaper);
-            if (context.mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                  content:
-                      Text(isFav ? '💔 حُذف من المفضلة' : '❤️ أُضيف للمفضلة'),
-                  duration: const Duration(seconds: 1),
-                  behavior: SnackBarBehavior.floating,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12))));
-            }
+            messenger.showSnackBar(SnackBar(
+                content: Text(isFav ? '💔 حُذف من المفضلة' : '❤️ أُضيف للمفضلة',
+                    style: AppFonts.poppins()),
+                duration: const Duration(seconds: 1),
+                behavior: SnackBarBehavior.floating,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12))));
           },
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 300),
@@ -1799,29 +2243,11 @@ class WallpaperCard extends StatelessWidget {
             child: Stack(
               fit: StackFit.expand,
               children: [
-                CachedNetworkImage(
-                    imageUrl: wallpaper.thumbnailUrl,
-                    fit: BoxFit.cover,
-                    // فك تشفير أخف لأن حجم البطاقة أصبح أصغر (3 أعمدة)
-                    memCacheWidth: 400,
-                    placeholder: (_, __) => const ShimmerLoadingCard(),
-                    errorWidget: (_, __, error) {
-                      AppLogger.error(
-                          '❌ Image load failed: ${wallpaper.thumbnailUrl} | $error');
-                      return Container(
-                          color: Colors.grey[850],
-                          child: const Icon(Icons.broken_image,
-                              color: Colors.grey));
-                    }),
-                Container(
-                    decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            colors: [
-                      Colors.transparent,
-                      Colors.black.withValues(alpha: 0.7)
-                    ]))),
+                NetImage(
+                    url: wallpaper.thumbnailUrl,
+                    fallbackUrl: wallpaper.fallbackUrl,
+                    memWidth: 400),
+                const _BottomScrim(),
                 Positioned(
                     bottom: 10,
                     left: 8,
@@ -1868,27 +2294,11 @@ class WallpaperCard169 extends StatelessWidget {
           child: Stack(
             fit: StackFit.expand,
             children: [
-              CachedNetworkImage(
-                  imageUrl: wallpaper.thumbnailUrl,
-                  fit: BoxFit.cover,
-                  placeholder: (_, __) => const ShimmerLoadingCard(),
-                  errorWidget: (_, __, error) {
-                    AppLogger.error(
-                        '❌ Image load failed: ${wallpaper.thumbnailUrl} | $error');
-                    return Container(
-                        color: Colors.grey[850],
-                        child:
-                            const Icon(Icons.broken_image, color: Colors.grey));
-                  }),
-              Container(
-                  decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [
-                    Colors.transparent,
-                    Colors.black.withValues(alpha: 0.65)
-                  ]))),
+              NetImage(
+                  url: wallpaper.thumbnailUrl,
+                  fallbackUrl: wallpaper.fallbackUrl,
+                  memWidth: 700),
+              const _BottomScrim(),
               Positioned(
                   bottom: 10,
                   left: 12,
@@ -1902,6 +2312,25 @@ class WallpaperCard169 extends StatelessWidget {
                       overflow: TextOverflow.ellipsis)),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// تدرّج سفلي ثابت (const) — أرخص من إنشاء BoxDecoration جديد لكل بطاقة
+class _BottomScrim extends StatelessWidget {
+  const _BottomScrim();
+
+  @override
+  Widget build(BuildContext context) {
+    return const DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          stops: [0.45, 1.0],
+          colors: [Colors.transparent, Color(0xB3000000)],
         ),
       ),
     );
@@ -1945,26 +2374,16 @@ class PrivacyPolicyScreen extends StatelessWidget {
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.all(16),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(20),
-                  child: BackdropFilter(
-                    filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-                    child: Container(
-                      padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.07),
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(
-                              color: Colors.white.withValues(alpha: 0.12))),
-                      child: SingleChildScrollView(
-                          child: Text(kPrivacyPolicyText,
-                              style: AppFonts.poppins(
-                                  color: Colors.white.withValues(alpha: 0.88),
-                                  fontSize: 13.5,
-                                  height: 1.9),
-                              textDirection: TextDirection.rtl)),
-                    ),
-                  ),
+                child: SolidPanel(
+                  radius: 20,
+                  padding: const EdgeInsets.all(20),
+                  child: SingleChildScrollView(
+                      child: Text(kPrivacyPolicyText,
+                          style: AppFonts.poppins(
+                              color: Colors.white.withValues(alpha: 0.88),
+                              fontSize: 13.5,
+                              height: 1.9),
+                          textDirection: TextDirection.rtl)),
                 ),
               ),
             ),
@@ -2086,8 +2505,9 @@ class _PrivacyPolicyDialogState extends State<PrivacyPolicyDialog> {
                 width: double.infinity,
                 child: ElevatedButton(
                   onPressed: () async {
+                    final navigator = Navigator.of(context);
                     await context.read<PrivacyProvider>().accept();
-                    if (context.mounted) Navigator.of(context).pop();
+                    navigator.pop();
                   },
                   style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.blueAccent,
@@ -2110,8 +2530,26 @@ class _PrivacyPolicyDialogState extends State<PrivacyPolicyDialog> {
   }
 }
 
+/// ✅ تحميل مسبق لأول قسمين + أول 4 صور من السلايدر. يُستدعى من main() قبل
+/// runApp أصلاً (بالتوازي مع تهيئة AdMob) حتى تبدأ طلبات الصور بأسرع وقت
+/// ممكن بدل انتظار اكتمال الإقلاع بالكامل ثم ظهور شاشة البداية.
+Future<void> _prefetchInitialWallpapers() async {
+  unawaited(GitHubService.futureOf('New'));
+  try {
+    final list = await GitHubService.futureOf('16:9');
+    for (final w in list.take(4)) {
+      if (w.thumbnailUrl.isEmpty) continue;
+      // resolve() يبدأ التنزيل ويضعه في كاش الصور بدون الحاجة إلى context
+      CachedNetworkImageProvider(w.thumbnailUrl)
+          .resolve(ImageConfiguration.empty);
+    }
+  } catch (e) {
+    AppLogger.error('❌ _prefetchInitialWallpapers failed: $e');
+  }
+}
+
 // =============================================================================
-// 8. SPLASH SCREEN
+// 8. SPLASH SCREEN — ✅ زمن أقصر (1500ms بدل 3000ms)
 // =============================================================================
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -2132,7 +2570,7 @@ class _SplashScreenState extends State<SplashScreen>
     SystemChrome.setSystemUIOverlayStyle(
         const SystemUiOverlayStyle(statusBarColor: Colors.transparent));
     _controller = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 1800));
+        vsync: this, duration: const Duration(milliseconds: 1200));
     _fadeAnim = Tween<double>(begin: 0, end: 1).animate(CurvedAnimation(
         parent: _controller,
         curve: const Interval(0, 0.5, curve: Curves.easeIn)));
@@ -2143,6 +2581,11 @@ class _SplashScreenState extends State<SplashScreen>
         parent: _controller,
         curve: const Interval(0.5, 1.0, curve: Curves.easeIn)));
     _controller.forward();
+
+    // ✅ التحميل المسبق يبدأ الآن من main() قبل حتى ظهور هذه الشاشة (أثناء
+    // تهيئة AdMob)، فيصل هنا وقد بدأ فعلياً أو اكتمل. futureOf مُخزَّن مسبقاً
+    // (memoized) لذا لا يتكرر أي طلب شبكة بإعادة النداء هنا.
+    unawaited(_prefetchInitialWallpapers());
 
     bool adFinished = false;
     bool splashTimeElapsed = false;
@@ -2156,7 +2599,7 @@ class _SplashScreenState extends State<SplashScreen>
         Navigator.of(context).pushReplacement(PageRouteBuilder(
             pageBuilder: (_, anim, __) =>
                 FadeTransition(opacity: anim, child: const MainLayout()),
-            transitionDuration: const Duration(milliseconds: 600)));
+            transitionDuration: const Duration(milliseconds: 400)));
       }
     }
 
@@ -2165,7 +2608,7 @@ class _SplashScreenState extends State<SplashScreen>
       maybeNavigate();
     });
 
-    Future.delayed(const Duration(milliseconds: 3000), () {
+    Future.delayed(const Duration(milliseconds: 1500), () {
       splashTimeElapsed = true;
       maybeNavigate();
     });
@@ -2266,7 +2709,7 @@ class _SplashScreenState extends State<SplashScreen>
 }
 
 // =============================================================================
-// 9. PREVIEW SCREEN
+// 9. PREVIEW SCREEN — ✅ الآن يستخدم heroTag فعلياً (كان يُمرَّر ولا يُستعمل)
 // =============================================================================
 class PreviewScreen extends StatefulWidget {
   final WallpaperModel wallpaper;
@@ -2302,60 +2745,41 @@ class _PreviewScreenState extends State<PreviewScreen> {
   }
 
   void _handleDownload(BuildContext context, WallpaperModel wallpaper) {
-    final coinsProvider = Provider.of<CoinsProvider>(context, listen: false);
-    if (coinsProvider.coins >= 10) {
-      DownloadService.downloadWallpaper(context, wallpaper);
-    } else {
-      showInsufficientCoinsDialog(context);
-    }
+    DownloadService.downloadWallpaper(context, wallpaper);
   }
 
   @override
   Widget build(BuildContext context) {
+    // ✅ فك الترميز بحجم الشاشة الفعلي (بالبكسل) بدل الأبعاد الكاملة للصورة
+    // (قد تكون 4K+) — يقلّل زمن ووزن فك الترميز فتظهر الصورة أسرع وبسلاسة
+    // أكبر أثناء التمرير، دون التأثير على جودة ملف التحميل الفعلي لاحقاً.
+    final media = MediaQuery.of(context);
+    final decodeWidth = (media.size.width * media.devicePixelRatio).round();
     return Scaffold(
       backgroundColor: Colors.black,
       body: PageView.builder(
         controller: _pageController,
         onPageChanged: (index) => setState(() => _currentIndex = index),
         itemCount: widget.wallpapers.length,
+        // ✅ يجعل فلاتر تبني الصفحة التالية/السابقة مسبقاً (وبالتالي تبدأ
+        // صورتها بالتنزيل) قبل أن يصل إليها المستخدم بالتمرير فعلياً.
+        allowImplicitScrolling: true,
         itemBuilder: (context, index) {
           final wallpaper = widget.wallpapers[index];
+          // ✅ الصورة الكاملة أيضاً تستفيد من التراجع التلقائي بين النطاقين
+          final image = NetImage(
+            url: wallpaper.imageUrl,
+            fallbackUrl: wallpaper.fallbackUrl,
+            fit: wallpaper.isLandscape ? BoxFit.fitWidth : BoxFit.cover,
+            memWidth: decodeWidth,
+          );
+
           return Stack(children: [
             Positioned.fill(
-                child: CachedNetworkImage(
-                    imageUrl: wallpaper.imageUrl,
-                    fit: wallpaper.isLandscape ? BoxFit.fitWidth : BoxFit.cover,
-                    placeholder: (_, __) => Container(
-                        color: Colors.grey[900],
-                        child: const Center(
-                            child: CircularProgressIndicator(
-                                color: Colors.blueAccent))),
-                    errorWidget: (_, __, error) {
-                      AppLogger.error(
-                          '❌ Preview image load failed: ${wallpaper.imageUrl} | $error');
-                      return Container(
-                          color: Colors.grey[900],
-                          child: const Icon(Icons.error,
-                              color: Colors.white, size: 48));
-                    })),
-            Positioned.fill(
-                child: Container(
-                    decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            stops: const [
-                  0.0,
-                  0.35,
-                  0.7,
-                  1.0
-                ],
-                            colors: [
-                  Colors.black.withValues(alpha: 0.45),
-                  Colors.transparent,
-                  Colors.transparent,
-                  Colors.black.withValues(alpha: 0.95)
-                ])))),
+                child: index == widget.initialIndex
+                    ? Hero(tag: widget.heroTag, child: image)
+                    : image),
+            const Positioned.fill(child: _PreviewScrim()),
             Positioned(
               top: 48,
               left: 16,
@@ -2375,8 +2799,9 @@ class _PreviewScreenState extends State<PreviewScreen> {
                   IconButton(
                       icon: const Icon(Icons.share,
                           color: Colors.white, size: 22),
-                      onPressed: () => Share.share(
-                          'شاهد هذه الخلفية الرائعة: ${wallpaper.title}\n${wallpaper.imageUrl}')),
+                      onPressed: () => SharePlus.instance.share(ShareParams(
+                          text:
+                              'شاهد هذه الخلفية الرائعة: ${wallpaper.title}\n${wallpaper.imageUrl}'))),
                 ]),
               ),
             ),
@@ -2457,6 +2882,28 @@ class _PreviewScreenState extends State<PreviewScreen> {
   }
 }
 
+class _PreviewScrim extends StatelessWidget {
+  const _PreviewScrim();
+  @override
+  Widget build(BuildContext context) {
+    return const DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          stops: [0.0, 0.35, 0.7, 1.0],
+          colors: [
+            Color(0x73000000),
+            Colors.transparent,
+            Colors.transparent,
+            Color(0xF2000000),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _ActionButton extends StatelessWidget {
   final IconData icon;
   final String label;
@@ -2497,7 +2944,7 @@ class CategoryWallpapersScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final is169 = categoryName == '16:9' || categoryName == '16:9 Ratio';
     return Scaffold(
-      backgroundColor: Colors.transparent,
+      backgroundColor: const Color(0xFF0F1620),
       appBar: AppBar(
           backgroundColor: Colors.transparent,
           elevation: 0,
@@ -2524,48 +2971,55 @@ class _WallpaperGridLoader extends StatefulWidget {
   State<_WallpaperGridLoader> createState() => _WallpaperGridLoaderState();
 }
 
-class _WallpaperGridLoaderState extends State<_WallpaperGridLoader> {
+class _WallpaperGridLoaderState extends State<_WallpaperGridLoader>
+    with AutomaticKeepAliveClientMixin {
   late Future<List<WallpaperModel>> _future;
+
+  @override
+  bool get wantKeepAlive => true;
 
   @override
   void initState() {
     super.initState();
-    _future = GitHubService.getWallpapers(widget.categoryName);
+    _future = GitHubService.futureOf(widget.categoryName);
   }
 
-  void _refresh() {
+  Future<void> _refresh() async {
     GitHubService.clearCache();
-    setState(() => _future = GitHubService.getWallpapers(widget.categoryName));
+    if (!mounted) return;
+    setState(() => _future = GitHubService.futureOf(widget.categoryName));
+    await _future;
   }
 
   void _navigateWithAd(WallpaperModel wallpaper, Object heroTag,
       List<WallpaperModel> wallpapers, int initialIndex) {
     AdMobManager().trackWallpaperView(
       onAdComplete: () {
-        if (mounted) {
-          Navigator.push(
-              context,
-              PageRouteBuilder(
-                  pageBuilder: (_, anim, __) => FadeTransition(
-                      opacity: anim,
-                      child: PreviewScreen(
-                          wallpaper: wallpaper,
-                          heroTag: heroTag,
-                          wallpapers: wallpapers,
-                          initialIndex: initialIndex)),
-                  transitionDuration: const Duration(milliseconds: 300)));
-        }
+        if (!mounted) return;
+        Navigator.push(
+            context,
+            PageRouteBuilder(
+                pageBuilder: (_, anim, __) => FadeTransition(
+                    opacity: anim,
+                    child: PreviewScreen(
+                        wallpaper: wallpaper,
+                        heroTag: heroTag,
+                        wallpapers: wallpapers,
+                        initialIndex: initialIndex)),
+                transitionDuration: const Duration(milliseconds: 280)));
       },
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     return FutureBuilder<List<WallpaperModel>>(
       future: _future,
       builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting)
+        if (snapshot.connectionState == ConnectionState.waiting) {
           return widget.isLandscape ? _shimmerLandscape() : _shimmerGrid();
+        }
         if (!snapshot.hasData || snapshot.data!.isEmpty) {
           return Center(
               child: Column(
@@ -2582,6 +3036,7 @@ class _WallpaperGridLoaderState extends State<_WallpaperGridLoader> {
                     label: Text('إعادة المحاولة', style: AppFonts.poppins()),
                     style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.blueAccent,
+                        foregroundColor: Colors.white,
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12))))
               ]));
@@ -2591,30 +3046,37 @@ class _WallpaperGridLoaderState extends State<_WallpaperGridLoader> {
           const ResponsiveBannerAdWidget(),
           Expanded(
             child: RefreshIndicator(
-              onRefresh: () async => _refresh(),
+              onRefresh: _refresh,
               color: Colors.blueAccent,
               child: widget.isLandscape
                   ? ListView.builder(
                       padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
                       itemCount: wallpapers.length,
+                      cacheExtent: 600,
+                      addAutomaticKeepAlives: false,
                       itemBuilder: (context, index) {
+                        final heroTag =
+                            'grid_${widget.categoryName}_${wallpapers[index].id}_$index';
                         return Padding(
                             padding: const EdgeInsets.only(bottom: 12),
                             child: AspectRatio(
                                 aspectRatio: 16 / 9,
-                                child: WallpaperCard169(
-                                    wallpaper: wallpapers[index],
-                                    heroTag:
-                                        'wp_${wallpapers[index].id}_${widget.categoryName}_$index',
-                                    onTap: () => _navigateWithAd(
-                                        wallpapers[index],
-                                        'wp_${wallpapers[index].id}_${widget.categoryName}_$index',
-                                        wallpapers,
-                                        index))));
+                                child: RepaintBoundary(
+                                  child: WallpaperCard169(
+                                      wallpaper: wallpapers[index],
+                                      heroTag: heroTag,
+                                      onTap: () => _navigateWithAd(
+                                          wallpapers[index],
+                                          heroTag,
+                                          wallpapers,
+                                          index)),
+                                )));
                       },
                     )
                   : GridView.builder(
                       padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
+                      cacheExtent: 700,
+                      addAutomaticKeepAlives: false,
                       gridDelegate:
                           const SliverGridDelegateWithFixedCrossAxisCount(
                               crossAxisCount: 2,
@@ -2624,7 +3086,7 @@ class _WallpaperGridLoaderState extends State<_WallpaperGridLoader> {
                       itemCount: wallpapers.length,
                       itemBuilder: (context, index) {
                         final heroTag =
-                            'wp_${wallpapers[index].id}_${widget.categoryName}_$index';
+                            'grid_${widget.categoryName}_${wallpapers[index].id}_$index';
                         return RepaintBoundary(
                           child: WallpaperCard(
                               wallpaper: wallpapers[index],
@@ -2648,19 +3110,24 @@ class _WallpaperGridLoaderState extends State<_WallpaperGridLoader> {
           childAspectRatio: 0.65,
           crossAxisSpacing: 12,
           mainAxisSpacing: 12),
-      itemCount: 10,
+      itemCount: 8,
       itemBuilder: (_, __) => const ShimmerLoadingCard());
+
   Widget _shimmerLandscape() => ListView.builder(
       padding: const EdgeInsets.all(16),
-      itemCount: 5,
-      itemBuilder: (_, __) => Padding(
-          padding: const EdgeInsets.only(bottom: 12),
-          child: AspectRatio(
-              aspectRatio: 16 / 9, child: const ShimmerLoadingCard())));
+      itemCount: 4,
+      itemBuilder: (_, __) => const Padding(
+          padding: EdgeInsets.only(bottom: 12),
+          child:
+              AspectRatio(aspectRatio: 16 / 9, child: ShimmerLoadingCard())));
 }
 
 // =============================================================================
 // 11. HOME SCREEN
+// -----------------------------------------------------------------------------
+// ✅ تعديلات: حذف بطاقات الإعلان من القوائم الأفقية (كانت تنشئ ~16 بانر في
+// وقت واحد داخل بطاقات عرضها 110 بكسل)، واستخدام futureOf بدل إنشاء Future
+// جديد في كل إعادة بناء.
 // =============================================================================
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -2674,7 +3141,7 @@ class HomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return CustomScrollView(slivers: [
+    return CustomScrollView(cacheExtent: 600, slivers: [
       SliverAppBar(
         floating: true,
         snap: true,
@@ -2768,7 +3235,7 @@ class HomeScreen extends StatelessWidget {
                     color: Colors.white)),
             if (title == '16:9') ...[
               const SizedBox(width: 8),
-              Icon(Icons.aspect_ratio, color: Colors.blueAccent, size: 20)
+              const Icon(Icons.aspect_ratio, color: Colors.blueAccent, size: 20)
             ]
           ]),
           GestureDetector(
@@ -2785,8 +3252,6 @@ class HomeScreen extends StatelessWidget {
 
   SliverToBoxAdapter _horizontalList(BuildContext context, String category) {
     final is169 = category == '16:9' || category == '16:9 Ratio';
-    // ✅ عرض البطاقة يُحسب من عرض الشاشة نفسها بحيث تظهر 3 بطاقات كاملة
-    // في كل صف بدل حجم ثابت (150) كان يعرض بطاقتين ونص فقط.
     final screenWidth = MediaQuery.of(context).size.width;
     const horizontalPadding = 16.0;
     const cardSpacing = 10.0;
@@ -2794,118 +3259,72 @@ class HomeScreen extends StatelessWidget {
         (screenWidth - (horizontalPadding * 2) - (cardSpacing * 2)) / 3;
     final cardWidth = is169 ? 285.0 : portraitCardWidth;
     final cardHeight = is169 ? 160.0 : cardWidth / 0.6;
+
     return SliverToBoxAdapter(
       child: FutureBuilder<List<WallpaperModel>>(
-        future: GitHubService.getWallpapers(category),
+        future: GitHubService.futureOf(category),
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting)
+          if (snapshot.connectionState == ConnectionState.waiting) {
             return SizedBox(
                 height: cardHeight,
                 child: ListView.separated(
                     scrollDirection: Axis.horizontal,
                     padding: const EdgeInsets.symmetric(
                         horizontal: horizontalPadding),
-                    itemCount: 5,
+                    itemCount: 4,
                     separatorBuilder: (_, __) =>
                         const SizedBox(width: cardSpacing),
                     itemBuilder: (_, __) => SizedBox(
                         width: cardWidth, child: const ShimmerLoadingCard())));
-          if (!snapshot.hasData || snapshot.data!.isEmpty)
+          }
+          if (!snapshot.hasData || snapshot.data!.isEmpty) {
             return SizedBox(height: cardHeight);
+          }
           final wallpapers = snapshot.data!;
-          final baseCount = wallpapers.length > 12 ? 12 : wallpapers.length;
-          final totalCount = baseCount + (baseCount ~/ 5);
+          final count = wallpapers.length > 12 ? 12 : wallpapers.length;
           return SizedBox(
             height: cardHeight,
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
               padding:
                   const EdgeInsets.symmetric(horizontal: horizontalPadding),
-              itemCount: totalCount,
+              itemCount: count,
+              addAutomaticKeepAlives: false,
               separatorBuilder: (_, __) => const SizedBox(width: cardSpacing),
-              itemBuilder: (context, displayIndex) {
-                const int adInterval = 6;
-                int imageIndex = displayIndex - (displayIndex ~/ adInterval);
-                if (displayIndex % adInterval == 5)
-                  return _adCard(cardWidth, cardHeight);
-                if (imageIndex >= baseCount) return const SizedBox.shrink();
+              itemBuilder: (context, index) {
                 final heroTag =
-                    'wp_${wallpapers[imageIndex].id}_${category}_$imageIndex';
-                return WallpaperCard(
-                  wallpaper: wallpapers[imageIndex],
-                  heroTag: heroTag,
-                  width: cardWidth,
-                  height: cardHeight,
-                  onTap: () {
-                    AdMobManager().trackWallpaperView(
-                      onAdComplete: () {
-                        Navigator.push(
-                            context,
-                            PageRouteBuilder(
-                                pageBuilder: (_, anim, __) => FadeTransition(
-                                    opacity: anim,
-                                    child: PreviewScreen(
-                                        wallpaper: wallpapers[imageIndex],
-                                        heroTag: heroTag,
-                                        wallpapers: wallpapers,
-                                        initialIndex: imageIndex)),
-                                transitionDuration:
-                                    const Duration(milliseconds: 300)));
-                      },
-                    );
-                  },
+                    'home_${category}_${wallpapers[index].id}_$index';
+                return RepaintBoundary(
+                  child: WallpaperCard(
+                    wallpaper: wallpapers[index],
+                    heroTag: heroTag,
+                    width: cardWidth,
+                    height: cardHeight,
+                    onTap: () {
+                      AdMobManager().trackWallpaperView(
+                        onAdComplete: () {
+                          Navigator.push(
+                              context,
+                              PageRouteBuilder(
+                                  pageBuilder: (_, anim, __) => FadeTransition(
+                                      opacity: anim,
+                                      child: PreviewScreen(
+                                          wallpaper: wallpapers[index],
+                                          heroTag: heroTag,
+                                          wallpapers: wallpapers,
+                                          initialIndex: index)),
+                                  transitionDuration:
+                                      const Duration(milliseconds: 280)));
+                        },
+                      );
+                    },
+                  ),
                 );
               },
             ),
           );
         },
       ),
-    );
-  }
-
-  Widget _adCard(double width, double height) {
-    return Container(
-      width: width,
-      height: height,
-      decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-              color: Colors.blueAccent.withValues(alpha: 0.3), width: 1)),
-      child: ClipRRect(
-          borderRadius: BorderRadius.circular(16),
-          child: Stack(fit: StackFit.expand, children: [
-            Container(
-                decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [
-                  Colors.blueAccent.withValues(alpha: 0.1),
-                  Colors.cyanAccent.withValues(alpha: 0.05)
-                ]))),
-            Center(
-                child: SizedBox(
-                    width: width * 0.9,
-                    height: height * 0.8,
-                    child: const ResponsiveBannerAdWidget())),
-            Positioned(
-              top: 6,
-              left: 6,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.55),
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.25))),
-                child: Text('إعلان',
-                    style: AppFonts.poppins(
-                        color: Colors.white,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600)),
-              ),
-            ),
-          ])),
     );
   }
 
@@ -2916,7 +3335,7 @@ class HomeScreen extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
           child: FutureBuilder<List<WallpaperModel>>(
-            future: GitHubService.getWallpapers(cat.name),
+            future: GitHubService.futureOf(cat.name),
             builder: (context, snapshot) {
               return Container(
                 height: 90,
@@ -2927,9 +3346,10 @@ class HomeScreen extends StatelessWidget {
                   borderRadius: BorderRadius.circular(16),
                   child: Stack(fit: StackFit.expand, children: [
                     if (snapshot.hasData && snapshot.data!.isNotEmpty)
-                      CachedNetworkImage(
-                          imageUrl: snapshot.data![0].thumbnailUrl,
-                          fit: BoxFit.cover),
+                      NetImage(
+                          url: snapshot.data![0].thumbnailUrl,
+                          fallbackUrl: snapshot.data![0].fallbackUrl,
+                          memWidth: 300),
                     Container(
                         decoration: BoxDecoration(
                             gradient: LinearGradient(colors: [
@@ -2978,7 +3398,7 @@ class HomeScreen extends StatelessWidget {
 }
 
 // =============================================================================
-// 11.1 TOP AUTO SLIDER — سلايدر زجاجي (Glassmorphism) لصور 16:9
+// 11.1 TOP AUTO SLIDER — سلايدر 16:9
 // =============================================================================
 class _TopAutoSlider169 extends StatefulWidget {
   const _TopAutoSlider169();
@@ -3004,7 +3424,7 @@ class _TopAutoSlider169State extends State<_TopAutoSlider169> {
 
   Future<void> _loadWallpapers() async {
     try {
-      final wallpapers = await GitHubService.getWallpapers('16:9');
+      final wallpapers = await GitHubService.futureOf('16:9');
       if (!mounted) return;
       setState(() {
         _wallpapers = wallpapers.length > _maxSlides
@@ -3035,7 +3455,6 @@ class _TopAutoSlider169State extends State<_TopAutoSlider169> {
   }
 
   void _restartAutoSlideDelayed() {
-    // عند تفاعل المستخدم يدوياً، نمنحه استراحة قبل استئناف التبديل التلقائي
     _timer?.cancel();
     _timer = Timer(const Duration(seconds: 6), () {
       if (mounted && _wallpapers.length > 1) _startAutoSlide();
@@ -3051,9 +3470,11 @@ class _TopAutoSlider169State extends State<_TopAutoSlider169> {
 
   void _openWallpaper(BuildContext context, int index) {
     final wallpaper = _wallpapers[index];
-    final heroTag = 'wp_top_slider_${wallpaper.id}_$index';
+    // ✅ نفس الوسم المستخدم في الـ Hero بالأسفل حتى تعمل حركة الانتقال فعلاً
+    final heroTag = 'slider_${wallpaper.id}_$index';
     AdMobManager().trackWallpaperView(
       onAdComplete: () {
+        if (!mounted) return;
         Navigator.push(
           context,
           PageRouteBuilder(
@@ -3066,20 +3487,18 @@ class _TopAutoSlider169State extends State<_TopAutoSlider169> {
                 initialIndex: index,
               ),
             ),
-            transitionDuration: const Duration(milliseconds: 300),
+            transitionDuration: const Duration(milliseconds: 280),
           ),
         );
       },
     );
   }
 
-  // ── حاوية زجاجية عامة (Glass container helper) ──
   Widget _glass({
     required Widget child,
-    double radius = 18,
-    double blur = 14,
+    double radius = 14,
+    double blur = 10,
     double opacity = 0.14,
-    Border? border,
     EdgeInsetsGeometry? padding,
   }) {
     return ClipRRect(
@@ -3091,8 +3510,7 @@ class _TopAutoSlider169State extends State<_TopAutoSlider169> {
           decoration: BoxDecoration(
             color: Colors.white.withValues(alpha: opacity),
             borderRadius: BorderRadius.circular(radius),
-            border: border ??
-                Border.all(color: Colors.white.withValues(alpha: 0.28)),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.28)),
           ),
           child: child,
         ),
@@ -3103,13 +3521,9 @@ class _TopAutoSlider169State extends State<_TopAutoSlider169> {
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return Padding(
-        padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(26),
-          child: const AspectRatio(
-              aspectRatio: 16 / 9, child: ShimmerLoadingCard()),
-        ),
+      return const Padding(
+        padding: EdgeInsets.fromLTRB(16, 10, 16, 6),
+        child: AspectRatio(aspectRatio: 16 / 9, child: ShimmerLoadingCard()),
       );
     }
 
@@ -3120,14 +3534,12 @@ class _TopAutoSlider169State extends State<_TopAutoSlider169> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── عنوان زجاجي علوي ──
           Padding(
             padding: const EdgeInsets.only(bottom: 10),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 _glass(
-                  radius: 14,
                   padding:
                       const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
                   child: Row(mainAxisSize: MainAxisSize.min, children: [
@@ -3145,7 +3557,6 @@ class _TopAutoSlider169State extends State<_TopAutoSlider169> {
                   onTap: () => Navigator.push(context,
                       MaterialPageRoute(builder: (_) => const Screen169())),
                   child: _glass(
-                    radius: 14,
                     padding:
                         const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
                     child: Row(mainAxisSize: MainAxisSize.min, children: [
@@ -3163,68 +3574,43 @@ class _TopAutoSlider169State extends State<_TopAutoSlider169> {
               ],
             ),
           ),
-          // ── جسم السلايدر — الصورة فقط بدون أي شريط أو تراكب ──
           AspectRatio(
             aspectRatio: 16 / 9,
             child: ClipRRect(
               borderRadius: BorderRadius.circular(28),
-              child: Container(
-                decoration: BoxDecoration(
-                  boxShadow: [
-                    BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.35),
-                        blurRadius: 24,
-                        offset: const Offset(0, 12)),
-                  ],
-                ),
-                child: NotificationListener<ScrollNotification>(
-                  onNotification: (notif) {
-                    if (notif is ScrollStartNotification) {
-                      _timer?.cancel();
-                    }
-                    if (notif is ScrollEndNotification) {
-                      _restartAutoSlideDelayed();
-                    }
-                    return false;
-                  },
-                  child: PageView.builder(
-                    controller: _pageController,
-                    itemCount: _wallpapers.length,
-                    onPageChanged: (i) => setState(() => _currentPage = i),
-                    // تحسين السلاسة: يبني صفحة إضافية قبل وبعد الصفحة الحالية
-                    // مسبقاً حتى تكون الصورة جاهزة لحظة وصول السحب إليها
-                    allowImplicitScrolling: true,
-                    itemBuilder: (context, index) {
-                      final wallpaper = _wallpapers[index];
-                      return RepaintBoundary(
-                        child: GestureDetector(
-                          onTap: () => _openWallpaper(context, index),
-                          child: Hero(
-                            tag: 'slider_thumb_${wallpaper.id}',
-                            child: CachedNetworkImage(
-                              imageUrl: wallpaper.thumbnailUrl.isNotEmpty
-                                  ? wallpaper.thumbnailUrl
-                                  : wallpaper.imageUrl,
-                              fit: BoxFit.cover,
-                              // تقليل حجم فك التشفير يقلل استهلاك الذاكرة
-                              // ويجعل التمرير أكثر سلاسة مع الصور عالية الدقة
-                              memCacheWidth: 900,
-                              fadeInDuration: const Duration(milliseconds: 250),
-                              placeholder: (_, __) =>
-                                  const ShimmerLoadingCard(),
-                              errorWidget: (_, __, ___) =>
-                                  Container(color: Colors.grey[900]),
-                            ),
+              child: NotificationListener<ScrollNotification>(
+                onNotification: (notif) {
+                  if (notif is ScrollStartNotification) _timer?.cancel();
+                  if (notif is ScrollEndNotification) {
+                    _restartAutoSlideDelayed();
+                  }
+                  return false;
+                },
+                child: PageView.builder(
+                  controller: _pageController,
+                  itemCount: _wallpapers.length,
+                  onPageChanged: (i) => setState(() => _currentPage = i),
+                  allowImplicitScrolling: true,
+                  itemBuilder: (context, index) {
+                    final wallpaper = _wallpapers[index];
+                    return RepaintBoundary(
+                      child: GestureDetector(
+                        onTap: () => _openWallpaper(context, index),
+                        child: Hero(
+                          tag: 'slider_${wallpaper.id}_$index',
+                          child: NetImage(
+                            url: wallpaper.thumbnailUrl,
+                            fallbackUrl: wallpaper.fallbackUrl,
+                            memWidth: 800,
                           ),
                         ),
-                      );
-                    },
-                  ),
+                      ),
+                    );
+                  },
                 ),
               ),
             ),
           ),
-          // ── مؤشر الصفحات فقط، أسفل الصورة تماماً (خارج الإطار) ──
           Padding(
             padding: const EdgeInsets.only(top: 10),
             child: Center(
@@ -3321,104 +3707,815 @@ class Screen169 extends StatelessWidget {
           const _WallpaperGridLoader(categoryName: '16:9', isLandscape: true));
 }
 
-class FavoritesScreen extends StatelessWidget {
+// =============================================================================
+// 12.1 ⭐ FAVORITES v2 — شاشة المفضلة المطوّرة
+// -----------------------------------------------------------------------------
+// بحث • فلترة بالتصنيف • ترتيب • عرض شبكي/قائمة • تحديد متعدد • تراجع عن الحذف
+// =============================================================================
+enum FavSort { recent, title, category }
+
+class FavoritesScreen extends StatefulWidget {
   const FavoritesScreen({super.key});
+
   @override
-  Widget build(BuildContext context) {
-    return Consumer<FavoritesProvider>(
-      builder: (context, favProvider, _) {
-        return CustomScrollView(slivers: [
-          SliverAppBar(
-              floating: true,
-              backgroundColor: Colors.transparent,
-              title: Text('Favorites',
-                  style: AppFonts.poppins(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 24,
-                      color: Colors.white)),
-              actions: [
-                if (favProvider.favorites.isNotEmpty)
-                  IconButton(
-                      icon: const Icon(Icons.delete_outline, color: Colors.red),
-                      onPressed: () => _confirmClearAll(context, favProvider))
-              ]),
-          const SliverToBoxAdapter(
-              child: Center(child: ResponsiveBannerAdWidget())),
-          if (favProvider.favorites.isEmpty)
-            SliverFillRemaining(
-                child: Center(
-                    child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                  Icon(Icons.favorite_border,
-                      size: 80, color: Colors.grey[600]),
-                  const SizedBox(height: 20),
-                  Text('لا توجد مفضلات بعد',
-                      style: AppFonts.poppins(
-                          color: Colors.grey[400], fontSize: 18)),
-                  const SizedBox(height: 8),
-                  Text('اضغط ♥ على أي صورة لحفظها هنا',
-                      style: AppFonts.poppins(
-                          color: Colors.grey[600], fontSize: 13))
-                ])))
-          else
-            SliverPadding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
-                sliver: SliverGrid(
-                    gridDelegate:
-                        const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 2,
-                            childAspectRatio: 0.65,
-                            crossAxisSpacing: 12,
-                            mainAxisSpacing: 12),
-                    delegate: SliverChildBuilderDelegate((context, index) {
-                      final wallpaper = favProvider.favorites[index];
-                      return WallpaperCard(
-                          wallpaper: wallpaper,
-                          heroTag: 'wp_${wallpaper.id}_favorites_$index',
-                          onTap: () => Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                  builder: (_) => PreviewScreen(
-                                      wallpaper: wallpaper,
-                                      heroTag:
-                                          'wp_${wallpaper.id}_favorites_$index',
-                                      wallpapers: favProvider.favorites,
-                                      initialIndex: index))));
-                    }, childCount: favProvider.favorites.length))),
-        ]);
-      },
+  State<FavoritesScreen> createState() => _FavoritesScreenState();
+}
+
+class _FavoritesScreenState extends State<FavoritesScreen> {
+  final TextEditingController _searchCtrl = TextEditingController();
+  String _query = '';
+  String? _categoryFilter;
+  FavSort _sort = FavSort.recent;
+  bool _gridView = true;
+  bool _selecting = false;
+  final Set<String> _selected = {};
+
+  static const Color _panel = Color(0xFF16202C);
+  static const Color _panelBorder = Color(0x1FFFFFFF);
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  // ── الفلترة والترتيب ──
+  List<WallpaperModel> _apply(List<WallpaperModel> source) {
+    final q = _query.trim().toLowerCase();
+    final list = source.where((w) {
+      final okCategory =
+          _categoryFilter == null || w.category == _categoryFilter;
+      final okQuery = q.isEmpty ||
+          w.title.toLowerCase().contains(q) ||
+          w.category.toLowerCase().contains(q);
+      return okCategory && okQuery;
+    }).toList();
+
+    switch (_sort) {
+      case FavSort.recent:
+        break; // الترتيب المخزّن أصلاً = الأحدث أولاً
+      case FavSort.title:
+        list.sort(
+            (a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()));
+        break;
+      case FavSort.category:
+        list.sort((a, b) {
+          final c = a.category.compareTo(b.category);
+          return c != 0 ? c : a.title.compareTo(b.title);
+        });
+        break;
+    }
+    return list;
+  }
+
+  String get _sortLabel {
+    switch (_sort) {
+      case FavSort.recent:
+        return 'الأحدث';
+      case FavSort.title:
+        return 'الاسم';
+      case FavSort.category:
+        return 'التصنيف';
+    }
+  }
+
+  // ── الإجراءات ──
+  void _toggleSelect(String id) {
+    setState(() {
+      if (!_selected.remove(id)) _selected.add(id);
+      if (_selected.isEmpty) _selecting = false;
+    });
+  }
+
+  void _startSelecting(String id) {
+    setState(() {
+      _selecting = true;
+      _selected
+        ..clear()
+        ..add(id);
+    });
+  }
+
+  void _exitSelecting() {
+    setState(() {
+      _selecting = false;
+      _selected.clear();
+    });
+  }
+
+  Future<void> _deleteIds(Set<String> ids) async {
+    final provider = context.read<FavoritesProvider>();
+    final removed = await provider.removeMany(ids);
+    if (!mounted || removed.isEmpty) return;
+    _exitSelecting();
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.clearSnackBars();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          removed.length == 1
+              ? 'حُذفت صورة من المفضلة'
+              : 'حُذفت ${removed.length} صور من المفضلة',
+          style: AppFonts.poppins(),
+        ),
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: const Color(0xFF1A2533),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        duration: const Duration(seconds: 5),
+        action: SnackBarAction(
+          label: 'تراجع',
+          textColor: Colors.amber,
+          onPressed: () => provider.restore(removed),
+        ),
+      ),
     );
   }
 
-  void _confirmClearAll(BuildContext context, FavoritesProvider provider) {
-    showDialog(
+  Future<void> _confirmClearAll() async {
+    final provider = context.read<FavoritesProvider>();
+    final ok = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
         backgroundColor: const Color(0xFF1A2533),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title:
-            Text('مسح المفضلة', style: AppFonts.poppins(color: Colors.white)),
-        content: Text('هل تريد حذف كل المفضلات؟',
+        title: Text('مسح المفضلة كاملة',
+            style: AppFonts.poppins(
+                color: Colors.white, fontWeight: FontWeight.bold)),
+        content: Text('سيتم حذف ${provider.count} صورة. يمكنك التراجع فوراً.',
             style: AppFonts.poppins(color: Colors.grey[400])),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(context),
+              onPressed: () => Navigator.pop(context, false),
               child: Text('إلغاء',
-                  style: AppFonts.poppins(color: Colors.grey[600]))),
+                  style: AppFonts.poppins(color: Colors.grey[500]))),
           TextButton(
-              onPressed: () async {
-                Navigator.pop(context);
-                await provider.clearAll();
-              },
+              onPressed: () => Navigator.pop(context, true),
               child:
-                  Text('مسح الكل', style: AppFonts.poppins(color: Colors.red)))
+                  Text('مسح الكل', style: AppFonts.poppins(color: Colors.red))),
         ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+
+    final removed = await provider.clearAll();
+    if (!mounted || removed.isEmpty) return;
+    _exitSelecting();
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(SnackBar(
+        content:
+            Text('حُذفت ${removed.length} صورة', style: AppFonts.poppins()),
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: const Color(0xFF1A2533),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        duration: const Duration(seconds: 5),
+        action: SnackBarAction(
+            label: 'تراجع',
+            textColor: Colors.amber,
+            onPressed: () => provider.restore(removed)),
+      ));
+  }
+
+  void _shareSelected(List<WallpaperModel> visible) {
+    final chosen = visible.where((w) => _selected.contains(w.id)).toList();
+    if (chosen.isEmpty) return;
+    final text = chosen.map((w) => '${w.title}\n${w.imageUrl}').join('\n\n');
+    SharePlus.instance.share(ShareParams(text: text));
+  }
+
+  void _openPreview(List<WallpaperModel> list, int index) {
+    final wallpaper = list[index];
+    AdMobManager().trackWallpaperView(onAdComplete: () {
+      if (!mounted) return;
+      Navigator.push(
+        context,
+        PageRouteBuilder(
+          transitionDuration: const Duration(milliseconds: 260),
+          pageBuilder: (_, anim, __) => FadeTransition(
+            opacity: anim,
+            child: PreviewScreen(
+              wallpaper: wallpaper,
+              heroTag: 'fav_${wallpaper.id}',
+              wallpapers: list,
+              initialIndex: index,
+            ),
+          ),
+        ),
+      );
+    });
+  }
+
+  // ── البناء ──
+  @override
+  Widget build(BuildContext context) {
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Consumer<FavoritesProvider>(
+        builder: (context, provider, _) {
+          final all = provider.favorites;
+          final visible = _apply(all);
+          final categories = provider.categories;
+
+          return Scaffold(
+            backgroundColor: Colors.transparent,
+            body: CustomScrollView(
+              // يبني عناصر أبعد قليلاً عن الشاشة مسبقاً → تمرير أنعم
+              cacheExtent: 600,
+              slivers: [
+                _appBar(provider, visible),
+                if (all.isNotEmpty) ...[
+                  SliverToBoxAdapter(child: _searchField()),
+                  if (categories.isNotEmpty)
+                    SliverToBoxAdapter(child: _categoryChips(categories)),
+                  SliverToBoxAdapter(
+                      child: _statsRow(all.length, visible.length)),
+                ],
+                if (all.isEmpty)
+                  SliverFillRemaining(
+                      hasScrollBody: false, child: _emptyState())
+                else if (visible.isEmpty)
+                  SliverFillRemaining(
+                      hasScrollBody: false, child: _noResultsState())
+                else if (_gridView)
+                  _grid(visible)
+                else
+                  _list(visible),
+                const SliverToBoxAdapter(child: SizedBox(height: 110)),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _appBar(FavoritesProvider provider, List<WallpaperModel> visible) {
+    if (_selecting) {
+      return SliverAppBar(
+        pinned: true,
+        backgroundColor: const Color(0xFF0F2027),
+        elevation: 0,
+        leading: IconButton(
+            icon: const Icon(Icons.close, color: Colors.white),
+            onPressed: _exitSelecting),
+        title: Text('${_selected.length} محددة',
+            style: AppFonts.poppins(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 18)),
+        actions: [
+          IconButton(
+            tooltip: 'تحديد الكل',
+            icon: const Icon(Icons.select_all, color: Colors.white),
+            onPressed: () => setState(() {
+              _selected
+                ..clear()
+                ..addAll(visible.map((w) => w.id));
+            }),
+          ),
+          IconButton(
+            tooltip: 'مشاركة',
+            icon: const Icon(Icons.share, color: Colors.white),
+            onPressed: () => _shareSelected(visible),
+          ),
+          IconButton(
+            tooltip: 'حذف',
+            icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+            onPressed: () => _deleteIds({..._selected}),
+          ),
+        ],
+      );
+    }
+
+    return SliverAppBar(
+      floating: true,
+      snap: true,
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new,
+              color: Colors.white, size: 20),
+          onPressed: () => Navigator.pop(context)),
+      title: Row(children: [
+        Text('المفضلة',
+            style: AppFonts.poppins(
+                fontWeight: FontWeight.bold,
+                fontSize: 22,
+                color: Colors.white)),
+        if (provider.count > 0) ...[
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            decoration: BoxDecoration(
+                color: Colors.red.withValues(alpha: 0.18),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.red.withValues(alpha: 0.35))),
+            child: Text('${provider.count}',
+                style: AppFonts.poppins(
+                    color: Colors.redAccent,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ]),
+      actions: provider.count == 0
+          ? null
+          : [
+              IconButton(
+                tooltip: _gridView ? 'عرض قائمة' : 'عرض شبكي',
+                icon: Icon(
+                    _gridView
+                        ? Icons.view_agenda_outlined
+                        : Icons.grid_view_rounded,
+                    color: Colors.white,
+                    size: 22),
+                onPressed: () => setState(() => _gridView = !_gridView),
+              ),
+              PopupMenuButton<FavSort>(
+                tooltip: 'ترتيب',
+                color: const Color(0xFF1A2533),
+                icon: const Icon(Icons.sort_rounded, color: Colors.white),
+                onSelected: (value) => setState(() => _sort = value),
+                itemBuilder: (_) => [
+                  _sortItem(FavSort.recent, 'الأحدث إضافة', Icons.schedule),
+                  _sortItem(FavSort.title, 'الاسم (أ–ي)', Icons.sort_by_alpha),
+                  _sortItem(
+                      FavSort.category, 'التصنيف', Icons.category_outlined),
+                ],
+              ),
+              IconButton(
+                tooltip: 'مسح الكل',
+                icon: const Icon(Icons.delete_sweep_outlined,
+                    color: Colors.redAccent),
+                onPressed: _confirmClearAll,
+              ),
+            ],
+    );
+  }
+
+  PopupMenuItem<FavSort> _sortItem(FavSort value, String label, IconData icon) {
+    final selected = _sort == value;
+    return PopupMenuItem<FavSort>(
+      value: value,
+      child: Row(children: [
+        Icon(icon,
+            size: 18, color: selected ? Colors.blueAccent : Colors.grey[500]),
+        const SizedBox(width: 10),
+        Text(label,
+            style: AppFonts.poppins(
+                color: selected ? Colors.blueAccent : Colors.white,
+                fontSize: 13,
+                fontWeight: selected ? FontWeight.w600 : FontWeight.normal)),
+      ]),
+    );
+  }
+
+  Widget _searchField() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+      child: Container(
+        decoration: BoxDecoration(
+            color: _panel,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: _panelBorder)),
+        child: TextField(
+          controller: _searchCtrl,
+          onChanged: (v) => setState(() => _query = v),
+          style: AppFonts.poppins(color: Colors.white, fontSize: 14),
+          cursorColor: Colors.blueAccent,
+          textInputAction: TextInputAction.search,
+          decoration: InputDecoration(
+            border: InputBorder.none,
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+            hintText: 'ابحث داخل المفضلة',
+            hintStyle: AppFonts.poppins(color: Colors.grey[600], fontSize: 13),
+            prefixIcon: Icon(Icons.search, color: Colors.grey[500], size: 20),
+            suffixIcon: _query.isEmpty
+                ? null
+                : IconButton(
+                    icon: Icon(Icons.close, color: Colors.grey[500], size: 18),
+                    onPressed: () {
+                      _searchCtrl.clear();
+                      setState(() => _query = '');
+                    },
+                  ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _categoryChips(List<String> categories) {
+    return SizedBox(
+      height: 46,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+        itemCount: categories.length + 1,
+        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        itemBuilder: (context, index) {
+          if (index == 0) {
+            return _chip('الكل', _categoryFilter == null,
+                () => setState(() => _categoryFilter = null));
+          }
+          final cat = categories[index - 1];
+          return _chip(cat, _categoryFilter == cat,
+              () => setState(() => _categoryFilter = cat));
+        },
+      ),
+    );
+  }
+
+  Widget _chip(String label, bool selected, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 220),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: selected ? Colors.blueAccent.withValues(alpha: 0.22) : _panel,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+              color: selected
+                  ? Colors.blueAccent.withValues(alpha: 0.6)
+                  : _panelBorder),
+        ),
+        child: Text(label,
+            style: AppFonts.poppins(
+                color: selected ? Colors.blueAccent : Colors.grey[400],
+                fontSize: 12.5,
+                fontWeight: selected ? FontWeight.w600 : FontWeight.normal)),
+      ),
+    );
+  }
+
+  Widget _statsRow(int total, int shown) {
+    final filtered = shown != total;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(18, 12, 18, 4),
+      child: Row(children: [
+        Text(filtered ? '$shown من $total صورة' : '$total صورة',
+            style: AppFonts.poppins(color: Colors.grey[500], fontSize: 12)),
+        const Spacer(),
+        Icon(Icons.sort_rounded, size: 13, color: Colors.grey[600]),
+        const SizedBox(width: 4),
+        Text(_sortLabel,
+            style: AppFonts.poppins(color: Colors.grey[500], fontSize: 12)),
+      ]),
+    );
+  }
+
+  Widget _grid(List<WallpaperModel> visible) {
+    return SliverPadding(
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+      sliver: SliverGrid(
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2,
+            childAspectRatio: 0.66,
+            crossAxisSpacing: 12,
+            mainAxisSpacing: 12),
+        delegate: SliverChildBuilderDelegate(
+          (context, index) {
+            final wallpaper = visible[index];
+            return RepaintBoundary(
+              child: _FavGridCard(
+                wallpaper: wallpaper,
+                selecting: _selecting,
+                selected: _selected.contains(wallpaper.id),
+                onTap: () => _selecting
+                    ? _toggleSelect(wallpaper.id)
+                    : _openPreview(visible, index),
+                onLongPress: () => _startSelecting(wallpaper.id),
+                onRemove: () => _deleteIds({wallpaper.id}),
+              ),
+            );
+          },
+          childCount: visible.length,
+          addAutomaticKeepAlives: false,
+          addRepaintBoundaries: false,
+        ),
+      ),
+    );
+  }
+
+  Widget _list(List<WallpaperModel> visible) {
+    return SliverPadding(
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+      sliver: SliverList(
+        delegate: SliverChildBuilderDelegate(
+          (context, index) {
+            final wallpaper = visible[index];
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: RepaintBoundary(
+                child: _FavListRow(
+                  wallpaper: wallpaper,
+                  selecting: _selecting,
+                  selected: _selected.contains(wallpaper.id),
+                  onTap: () => _selecting
+                      ? _toggleSelect(wallpaper.id)
+                      : _openPreview(visible, index),
+                  onLongPress: () => _startSelecting(wallpaper.id),
+                  onRemove: () => _deleteIds({wallpaper.id}),
+                ),
+              ),
+            );
+          },
+          childCount: visible.length,
+          addAutomaticKeepAlives: false,
+          addRepaintBoundaries: false,
+        ),
+      ),
+    );
+  }
+
+  Widget _emptyState() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+          Container(
+            width: 96,
+            height: 96,
+            decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.red.withValues(alpha: 0.08),
+                border: Border.all(color: Colors.red.withValues(alpha: 0.25))),
+            child: const Icon(Icons.favorite_border,
+                size: 44, color: Colors.redAccent),
+          ),
+          const SizedBox(height: 22),
+          Text('المفضلة فارغة',
+              style: AppFonts.poppins(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600)),
+          const SizedBox(height: 8),
+          Text('اضغط ♥ على أي خلفية لتحفظها هنا وتصل إليها بسرعة',
+              textAlign: TextAlign.center,
+              style: AppFonts.poppins(color: Colors.grey[500], fontSize: 13)),
+          const SizedBox(height: 22),
+          ElevatedButton.icon(
+            onPressed: () => Navigator.pop(context),
+            icon: const Icon(Icons.photo_library_outlined, size: 18),
+            label: Text('تصفّح الخلفيات',
+                style: AppFonts.poppins(
+                    fontSize: 13, fontWeight: FontWeight.w600)),
+            style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blueAccent,
+                foregroundColor: Colors.white,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14)),
+                elevation: 0),
+          ),
+        ]),
+      ),
+    );
+  }
+
+  Widget _noResultsState() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+          Icon(Icons.search_off, size: 56, color: Colors.grey[700]),
+          const SizedBox(height: 16),
+          Text('لا نتائج مطابقة',
+              style: AppFonts.poppins(color: Colors.grey[400], fontSize: 15)),
+          const SizedBox(height: 14),
+          TextButton(
+            onPressed: () {
+              _searchCtrl.clear();
+              setState(() {
+                _query = '';
+                _categoryFilter = null;
+              });
+            },
+            child: Text('إزالة الفلاتر',
+                style: AppFonts.poppins(color: Colors.blueAccent)),
+          ),
+        ]),
       ),
     );
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 3) البطاقات
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _FavGridCard extends StatelessWidget {
+  final WallpaperModel wallpaper;
+  final bool selecting;
+  final bool selected;
+  final VoidCallback onTap;
+  final VoidCallback onLongPress;
+  final VoidCallback onRemove;
+
+  const _FavGridCard({
+    required this.wallpaper,
+    required this.selecting,
+    required this.selected,
+    required this.onTap,
+    required this.onLongPress,
+    required this.onRemove,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      onLongPress: onLongPress,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+              color: selected ? Colors.blueAccent : Colors.transparent,
+              width: 2.5),
+          boxShadow: [
+            BoxShadow(
+                color: Colors.black.withValues(alpha: 0.3),
+                blurRadius: 8,
+                offset: const Offset(0, 4))
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(14),
+          child: Stack(fit: StackFit.expand, children: [
+            Hero(
+              tag: 'fav_${wallpaper.id}',
+              child: NetImage(
+                url: wallpaper.thumbnailUrl,
+                fallbackUrl: wallpaper.fallbackUrl,
+                memWidth: 400,
+              ),
+            ),
+            const _BottomScrim(),
+            Positioned(
+              bottom: 10,
+              right: 8,
+              left: 8,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(wallpaper.title,
+                      style: AppFonts.poppins(
+                          color: Colors.white,
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w600),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis),
+                  Text(wallpaper.category,
+                      style: AppFonts.poppins(
+                          color: Colors.white60, fontSize: 9.5)),
+                ],
+              ),
+            ),
+            if (selecting)
+              Positioned(
+                top: 8,
+                left: 8,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 160),
+                  padding: const EdgeInsets.all(3),
+                  decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: selected
+                          ? Colors.blueAccent
+                          : Colors.black.withValues(alpha: 0.45),
+                      border: Border.all(color: Colors.white70, width: 1.5)),
+                  child: Icon(selected ? Icons.check : Icons.circle_outlined,
+                      size: 14, color: Colors.white),
+                ),
+              )
+            else
+              Positioned(
+                top: 6,
+                left: 6,
+                child: GestureDetector(
+                  onTap: onRemove,
+                  behavior: HitTestBehavior.opaque,
+                  child: Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Colors.black.withValues(alpha: 0.42)),
+                    child: const Icon(Icons.favorite,
+                        color: Colors.redAccent, size: 15),
+                  ),
+                ),
+              ),
+          ]),
+        ),
+      ),
+    );
+  }
+}
+
+class _FavListRow extends StatelessWidget {
+  final WallpaperModel wallpaper;
+  final bool selecting;
+  final bool selected;
+  final VoidCallback onTap;
+  final VoidCallback onLongPress;
+  final VoidCallback onRemove;
+
+  const _FavListRow({
+    required this.wallpaper,
+    required this.selecting,
+    required this.selected,
+    required this.onTap,
+    required this.onLongPress,
+    required this.onRemove,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      onLongPress: onLongPress,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: selected
+              ? Colors.blueAccent.withValues(alpha: 0.14)
+              : const Color(0xFF16202C),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+              color: selected
+                  ? Colors.blueAccent.withValues(alpha: 0.6)
+                  : const Color(0x1FFFFFFF)),
+        ),
+        child: Row(children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: SizedBox(
+              width: 78,
+              height: 78,
+              child: NetImage(
+                url: wallpaper.thumbnailUrl,
+                fallbackUrl: wallpaper.fallbackUrl,
+                memWidth: 220,
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(wallpaper.title,
+                      style: AppFonts.poppins(
+                          color: Colors.white,
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w600),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis),
+                  const SizedBox(height: 5),
+                  Row(children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                          color: Colors.blueAccent.withValues(alpha: 0.16),
+                          borderRadius: BorderRadius.circular(8)),
+                      child: Text(wallpaper.category,
+                          style: AppFonts.poppins(
+                              color: Colors.blueAccent, fontSize: 10)),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(wallpaper.isLandscape ? '16:9' : '9:16',
+                        style: AppFonts.poppins(
+                            color: Colors.grey[500], fontSize: 10)),
+                  ]),
+                ]),
+          ),
+          if (selecting)
+            Icon(selected ? Icons.check_circle : Icons.radio_button_unchecked,
+                color: selected ? Colors.blueAccent : Colors.grey[600],
+                size: 22)
+          else
+            IconButton(
+              icon:
+                  const Icon(Icons.favorite, color: Colors.redAccent, size: 20),
+              onPressed: onRemove,
+            ),
+        ]),
+      ),
+    );
+  }
+}
+
+// =============================================================================
+// 12.2 CATALOG
+// =============================================================================
 class CatalogScreen extends StatelessWidget {
   const CatalogScreen({super.key});
   @override
@@ -3453,7 +4550,7 @@ class CatalogScreen extends StatelessWidget {
                       builder: (_) =>
                           CategoryWallpapersScreen(categoryName: cat.name))),
               child: FutureBuilder<List<WallpaperModel>>(
-                future: GitHubService.getWallpapers(cat.name),
+                future: GitHubService.futureOf(cat.name),
                 builder: (context, snapshot) {
                   final firstUrl = snapshot.hasData && snapshot.data!.isNotEmpty
                       ? snapshot.data![0].thumbnailUrl
@@ -3462,24 +4559,15 @@ class CatalogScreen extends StatelessWidget {
                     borderRadius: BorderRadius.circular(18),
                     child: Stack(fit: StackFit.expand, children: [
                       firstUrl != null
-                          ? CachedNetworkImage(
-                              imageUrl: firstUrl,
-                              fit: BoxFit.cover,
-                              placeholder: (_, __) =>
-                                  const ShimmerLoadingCard())
+                          ? NetImage(
+                              url: firstUrl,
+                              fallbackUrl: snapshot.data![0].fallbackUrl,
+                              memWidth: 400)
                           : Container(
                               color: Colors.grey[850],
                               child: Icon(cat.icon,
                                   color: Colors.grey[600], size: 40)),
-                      Container(
-                          decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                  begin: Alignment.topCenter,
-                                  end: Alignment.bottomCenter,
-                                  colors: [
-                            Colors.transparent,
-                            Colors.black.withValues(alpha: 0.85)
-                          ]))),
+                      const _BottomScrim(),
                       Positioned(
                           bottom: 14,
                           left: 12,
@@ -3524,9 +4612,9 @@ class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
   @override
   Widget build(BuildContext context) {
-    final favCount = context.watch<FavoritesProvider>().favorites.length;
+    final favCount = context.watch<FavoritesProvider>().count;
     return Scaffold(
-      backgroundColor: Colors.transparent,
+      backgroundColor: const Color(0xFF0F1620),
       appBar: AppBar(
           backgroundColor: Colors.transparent,
           elevation: 0,
@@ -3608,7 +4696,7 @@ class SettingsScreen extends StatelessWidget {
             icon: Icons.delete_sweep,
             iconColor: Colors.orange,
             title: 'مسح الكاش',
-            subtitle: 'تحرير الذاكرة من الصور المؤقتة',
+            subtitle: 'تحرير الذاكرة وإعادة تحميل الصور',
             onTap: () {
               GitHubService.clearCache();
               ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -3617,27 +4705,6 @@ class SettingsScreen extends StatelessWidget {
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12)),
                   backgroundColor: Colors.green[700]));
-            }),
-        const SizedBox(height: 12),
-        _SettingsTile(
-            icon: Icons.network_check,
-            iconColor: Colors.green,
-            title: 'اختبار الاتصال بـ GitHub',
-            subtitle: 'التحقق من حالة الاتصال',
-            onTap: () async {
-              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                  content:
-                      Text('⏳ جاري الاختبار...', style: AppFonts.poppins()),
-                  behavior: SnackBarBehavior.floating));
-              final ok = await GitHubService.testConnection();
-              if (context.mounted)
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                    content: Text(ok ? '✅ الاتصال ناجح' : '❌ فشل الاتصال',
-                        style: AppFonts.poppins()),
-                    behavior: SnackBarBehavior.floating,
-                    backgroundColor: ok ? Colors.green[700] : Colors.red[700],
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12))));
             }),
         const SizedBox(height: 12),
         _SettingsTile(
@@ -3660,28 +4727,6 @@ class SettingsScreen extends StatelessWidget {
                 : null,
             onTap: () => Navigator.push(context,
                 MaterialPageRoute(builder: (_) => const FavoritesScreen()))),
-        const SizedBox(height: 12),
-        _SettingsTile(
-            icon: Icons.security,
-            iconColor: Colors.teal,
-            title: 'أذونات التطبيق',
-            subtitle: 'إدارة أذونات الصور والتخزين',
-            onTap: () async {
-              final isGranted = await GalleryPermission.isGranted();
-              if (context.mounted) {
-                if (isGranted) {
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                      content:
-                          Text('✅ الأذونات ممنوحة', style: AppFonts.poppins()),
-                      backgroundColor: Colors.green[700],
-                      behavior: SnackBarBehavior.floating,
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12))));
-                } else {
-                  openAppSettings();
-                }
-              }
-            }),
         const SizedBox(height: 12),
         _SettingsTile(
             icon: Icons.privacy_tip_outlined,
@@ -3729,7 +4774,7 @@ class SettingsScreen extends StatelessWidget {
                                     child: const Icon(Icons.wallpaper,
                                         color: Colors.white, size: 40))))),
                     const SizedBox(height: 16),
-                    Text('الإصدار 1.2',
+                    Text('الإصدار 1.1.0',
                         style: AppFonts.poppins(
                             color: Colors.grey[400], fontSize: 13)),
                     const SizedBox(height: 4),
@@ -3755,6 +4800,7 @@ class SettingsScreen extends StatelessWidget {
   }
 }
 
+/// ✅ بدون BackdropFilter — كان كل عنصر في القائمة يشغّل ضباباً منفصلاً
 class _SettingsTile extends StatelessWidget {
   final IconData icon;
   final Color iconColor;
@@ -3774,43 +4820,32 @@ class _SettingsTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(16),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-          child: Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(16),
-                border:
-                    Border.all(color: Colors.white.withValues(alpha: 0.12))),
-            child: Row(children: [
-              Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                      color: iconColor.withValues(alpha: 0.2),
-                      borderRadius: BorderRadius.circular(12)),
-                  child: Icon(icon, color: iconColor, size: 22)),
-              const SizedBox(width: 16),
-              Expanded(
-                  child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                    Text(title,
-                        style: AppFonts.poppins(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 14)),
-                    Text(subtitle,
-                        style: AppFonts.poppins(
-                            color: Colors.grey[400], fontSize: 12))
-                  ])),
-              if (trailing != null) ...[trailing!, const SizedBox(width: 6)],
-              const Icon(Icons.chevron_right, color: Colors.grey)
-            ]),
-          ),
-        ),
+      child: SolidPanel(
+        padding: const EdgeInsets.all(16),
+        child: Row(children: [
+          Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                  color: iconColor.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(12)),
+              child: Icon(icon, color: iconColor, size: 22)),
+          const SizedBox(width: 16),
+          Expanded(
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                Text(title,
+                    style: AppFonts.poppins(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14)),
+                Text(subtitle,
+                    style:
+                        AppFonts.poppins(color: Colors.grey[400], fontSize: 12))
+              ])),
+          if (trailing != null) ...[trailing!, const SizedBox(width: 6)],
+          const Icon(Icons.chevron_right, color: Colors.grey)
+        ]),
       ),
     );
   }
@@ -3833,7 +4868,7 @@ class MockData {
             accentColor: Colors.orange),
         CategoryModel(
             name: 'Sport',
-            repository: 'Sport',
+            repository: 'sport',
             icon: Icons.sports,
             accentColor: Colors.green),
         CategoryModel(
@@ -3860,7 +4895,7 @@ class MockData {
 }
 
 // =============================================================================
-// 15. BOTTOM NAV
+// 15. BOTTOM NAV — ✅ ضباب أخف (8 بدل 20)
 // =============================================================================
 class CustomBottomNav extends StatelessWidget {
   const CustomBottomNav({super.key});
@@ -3872,11 +4907,11 @@ class CustomBottomNav extends StatelessWidget {
       child: ClipRRect(
         borderRadius: BorderRadius.circular(30),
         child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+          filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
           child: Container(
             padding: const EdgeInsets.symmetric(vertical: 8),
             decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.1),
+                color: Colors.black.withValues(alpha: 0.45),
                 borderRadius: BorderRadius.circular(30),
                 border:
                     Border.all(color: Colors.white.withValues(alpha: 0.15))),
@@ -3933,8 +4968,8 @@ class _NavItem extends StatelessWidget {
     return GestureDetector(
       onTap: () => provider.changeTab(index),
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 400),
-        curve: Curves.easeInOutCubic,
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeOutCubic,
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
             color: isSelected
@@ -3958,6 +4993,10 @@ class _NavItem extends StatelessWidget {
 
 // =============================================================================
 // 16. MAIN LAYOUT
+// -----------------------------------------------------------------------------
+// ✅ AnimatedSwitcher كان يهدم الشاشة بالكامل عند كل تبديل تبويب (فقدان موضع
+// التمرير + إعادة كل الطلبات). الآن IndexedStack «كسول»: يبني التبويب عند أول
+// زيارة فقط ثم يبقيه حياً — تنقل فوري بلا إعادة تحميل.
 // =============================================================================
 class MainLayout extends StatefulWidget {
   const MainLayout({super.key});
@@ -3966,6 +5005,8 @@ class MainLayout extends StatefulWidget {
 }
 
 class _MainLayoutState extends State<MainLayout> {
+  final Set<int> _visited = {0};
+
   @override
   void initState() {
     super.initState();
@@ -3981,8 +5022,6 @@ class _MainLayoutState extends State<MainLayout> {
           barrierDismissible: false,
           builder: (_) => const PrivacyPolicyDialog()).then((_) async {
         if (!mounted) return;
-
-        // طلب الأذونات بعد الموافقة على السياسة
         await _requestInitialPermissions();
       });
     } else {
@@ -3990,31 +5029,39 @@ class _MainLayoutState extends State<MainLayout> {
     }
   }
 
+  /// ✅ إذن الإشعارات فقط عند الإقلاع. إذن المعرض يُطلب عند أول تحميل صورة
+  /// (وقت الحاجة) — هذا ما توصي به سياسة Google Play ويقلّل حوارات البداية.
   Future<void> _requestInitialPermissions() async {
-    // 1. طلب إذن الإشعارات (أندرويد و iOS)
     await NotificationService.requestPermissionAndSubscribe();
+  }
 
-    // 2. طلب إذن الصور/التخزين عند فتح التطبيق
-    await GalleryPermission.request();
+  Widget _screenAt(int index) {
+    switch (index) {
+      case 0:
+        return const HomeScreen();
+      case 1:
+        return const NewScreen();
+      case 2:
+        return const BestScreen();
+      case 3:
+        return const Screen169();
+      default:
+        return const CatalogScreen();
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<AppProvider>();
-    final screens = [
-      const HomeScreen(),
-      const NewScreen(),
-      const BestScreen(),
-      const Screen169(),
-      const CatalogScreen()
-    ];
+    _visited.add(provider.currentIndex);
+
     return Scaffold(
       backgroundColor: Colors.transparent,
       extendBodyBehindAppBar: true,
       body: Stack(children: [
-        Positioned.fill(
-            child: Container(
-                decoration: const BoxDecoration(
+        const Positioned.fill(
+            child: DecoratedBox(
+                decoration: BoxDecoration(
                     gradient: LinearGradient(
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
@@ -4024,15 +5071,13 @@ class _MainLayoutState extends State<MainLayout> {
               Color(0xFF1A1A2E)
             ])))),
         Positioned.fill(
-          child: AnimatedSwitcher(
-            duration: const Duration(milliseconds: 500),
-            transitionBuilder: (child, animation) =>
-                FadeTransition(opacity: animation, child: child),
-            switchInCurve: Curves.easeInOutCubic,
-            switchOutCurve: Curves.easeInOutCubic,
-            child: KeyedSubtree(
-                key: ValueKey(provider.currentIndex),
-                child: screens[provider.currentIndex]),
+          child: IndexedStack(
+            index: provider.currentIndex,
+            children: List.generate(
+              5,
+              (i) =>
+                  _visited.contains(i) ? _screenAt(i) : const SizedBox.shrink(),
+            ),
           ),
         ),
         const Positioned(
@@ -4062,41 +5107,48 @@ class WallpaperApp extends StatelessWidget {
   }
 }
 
+/// ✅ تهيئة Firebase والإشعارات تعمل في الخلفية بعد إقلاع الواجهة، فلا تؤخر
+/// ظهور أول شاشة (كانت تُنتظر قبل runApp).
+Future<void> _initFirebaseAndNotifications() async {
+  try {
+    await Firebase.initializeApp();
+    AppLogger.success('✅ Firebase initialized');
+    await NotificationService.initialize();
+    AppLogger.success('✅ Notification service initialized');
+  } catch (e) {
+    AppLogger.error('❌ Firebase/Notification initialization failed: $e');
+  }
+}
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // ✅ إصلاح الكراش الرئيسي: تم استبدال GoogleFonts.poppins() بخط Poppins
-  // محلي (assets/fonts) عبر AppFonts.poppins()، لذلك لم يعد التطبيق يحاول
-  // تحميل أي خط من الإنترنت إطلاقاً - وهذا يمنع نهائياً كراش
-  // "Failed host lookup: 'fonts.gstatic.com'" حتى بدون اتصال بالإنترنت.
-
-  // ✅ حماية إضافية: التقاط أي استثناءات غير متوقعة على مستوى إطار العمل
-  // بدل ترك التطبيق يتحطم بصمت.
   FlutterError.onError = (FlutterErrorDetails details) {
     FlutterError.presentError(details);
     AppLogger.error('❌ FlutterError: ${details.exceptionAsString()}');
   };
   PlatformDispatcher.instance.onError = (error, stack) {
     AppLogger.error('❌ Uncaught PlatformDispatcher error: $error');
-    return true; // امتصاص الخطأ بدل تحطم التطبيق
+    return true;
   };
-
-  // ✅ تفعيل Firebase وخدمة الإشعارات لجميع المنصات
-  try {
-    await Firebase.initializeApp();
-    AppLogger.success('✅ Firebase initialized successfully');
-    await NotificationService.initialize();
-    AppLogger.success('✅ Notification service initialized');
-  } catch (e) {
-    AppLogger.error('❌ Firebase/Notification initialization failed: $e');
-  }
 
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
       statusBarIconBrightness: Brightness.light));
 
+  // Firebase في الخلفية — لا يعطّل الإقلاع
+  unawaited(_initFirebaseAndNotifications());
+  unawaited(GitHubService.probeThumbProxy());
+
+  // ✅ صور أول شاشة تبدأ بالتنزيل فوراً هنا، بالتوازي مع تهيئة AdMob أدناه،
+  // بدل انتظار اكتمال الإقلاع كله (حتى 3 ثوانٍ) قبل أول طلب شبكة للصور.
+  unawaited(_prefetchInitialWallpapers());
+
+  // AdMob بمهلة قصوى 3 ثوانٍ حتى لا تتعطل الشاشة على شبكة بطيئة
   try {
-    await AdMobManager().initialize();
+    await AdMobManager()
+        .initialize()
+        .timeout(const Duration(seconds: 3), onTimeout: () {});
   } catch (e) {
     AppLogger.error('AdMob initialization failed: $e');
   }
