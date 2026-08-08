@@ -849,6 +849,7 @@ class GitHubService {
 
   static const Map<String, String> repositories = {
     'All Images': 'All-images',
+    'All-images': 'All-images',
     'New': 'All-images',
     'Best': 'All-images',
     'Sport': 'sport',
@@ -860,6 +861,31 @@ class GitHubService {
     '16:9': 'imag-16-9',
     '16:9 Ratio': 'imag-16-9',
   };
+
+  static String _normalizeCategoryKey(String value) {
+    return value.trim().toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '');
+  }
+
+  static String resolveRepositoryName(String categoryName) {
+    if (categoryName.isEmpty) {
+      AppLogger.warning('⚠️ Empty category name; falling back to All-images');
+      return 'All-images';
+    }
+
+    final direct = repositories[categoryName];
+    if (direct != null) return direct;
+
+    final normalized = _normalizeCategoryKey(categoryName);
+    for (final entry in repositories.entries) {
+      if (_normalizeCategoryKey(entry.key) == normalized) {
+        return entry.value;
+      }
+    }
+
+    AppLogger.warning(
+        '⚠️ Unknown category "$categoryName"; falling back to All-images');
+    return 'All-images';
+  }
 
   // كاش النماذج لكل قسم (رخيص — لا يسبب طلبات شبكة)
   static final Map<String, List<WallpaperModel>> _cache = {};
@@ -1252,6 +1278,16 @@ class GitHubService {
     }
   }
 
+  static Future<List<Map<String, dynamic>>> _getFilesWithFallback(
+      String repoName) async {
+    final files = await _getFiles(repoName);
+    if (files.isNotEmpty || repoName == 'All-images') return files;
+
+    AppLogger.warning(
+        '⚠️ Repo "$repoName" returned no files; falling back to All-images');
+    return _getFiles('All-images');
+  }
+
   // ✅ حدّ أقصى 3 طلبات متزامنة: الرئيسية كانت تفتح 7 طلبات دفعة واحدة
   // (مستودع لكل قسم) فتفشل بعضها على الشبكات الضعيفة أو تتأخر جداً.
   static int _activeFetches = 0;
@@ -1313,10 +1349,10 @@ class GitHubService {
       return _cache[categoryName]!;
     }
 
-    final repoName = repositories[categoryName];
-    if (repoName == null) return [];
+    final repoName = resolveRepositoryName(categoryName);
+    if (repoName.isEmpty) return [];
 
-    final files = await _getFiles(repoName);
+    final files = await _getFilesWithFallback(repoName);
     final is169 = categoryName == '16:9' || categoryName == '16:9 Ratio';
     final wallpapers = files.map((file) {
       final name = file['name'] as String? ?? 'unnamed';

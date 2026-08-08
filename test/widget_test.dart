@@ -3,13 +3,26 @@ import 'package:km2apps/main.dart';
 
 void main() {
   group('GitHubService.thumbUrl', () {
-    test('returns the original url unchanged while the thumb proxy is disabled', () {
+    test('returns the original url unchanged while the thumb proxy is disabled',
+        () {
       const url = 'https://raw.githubusercontent.com/owner/repo/main/1.jpg';
       expect(GitHubService.thumbUrl(url), url);
     });
 
     test('returns the original url for an empty input', () {
       expect(GitHubService.thumbUrl(''), '');
+    });
+  });
+
+  group('GitHubService.resolveRepositoryName', () {
+    test('falls back to All-images for unknown categories', () {
+      expect(GitHubService.resolveRepositoryName('Unknown Category'),
+          'All-images');
+    });
+
+    test('keeps the mapped repository for known categories', () {
+      expect(GitHubService.resolveRepositoryName('Nature'), 'nature');
+      expect(GitHubService.resolveRepositoryName('All-images'), 'All-images');
     });
   });
 
