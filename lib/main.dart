@@ -2582,6 +2582,7 @@ class _SplashScreenState extends State<SplashScreen>
         curve: const Interval(0.5, 1.0, curve: Curves.easeIn)));
     _controller.forward();
 
+    // ✅ تحميل مسبق لأول قسمين أثناء ظهور شاشة البداية → الرئيسية تفتح جاهزة
     // ✅ التحميل المسبق يبدأ الآن من main() قبل حتى ظهور هذه الشاشة (أثناء
     // تهيئة AdMob)، فيصل هنا وقد بدأ فعلياً أو اكتمل. futureOf مُخزَّن مسبقاً
     // (memoized) لذا لا يتكرر أي طلب شبكة بإعادة النداء هنا.
@@ -3581,9 +3582,8 @@ class _TopAutoSlider169State extends State<_TopAutoSlider169> {
               child: NotificationListener<ScrollNotification>(
                 onNotification: (notif) {
                   if (notif is ScrollStartNotification) _timer?.cancel();
-                  if (notif is ScrollEndNotification) {
+                  if (notif is ScrollEndNotification)
                     _restartAutoSlideDelayed();
-                  }
                   return false;
                 },
                 child: PageView.builder(
