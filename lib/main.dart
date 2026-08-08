@@ -5141,7 +5141,6 @@ void main() async {
   unawaited(GitHubService.probeThumbProxy());
 
   // ✅ صور أول شاشة تبدأ بالتنزيل فوراً هنا، بالتوازي مع تهيئة AdMob أدناه،
-  // بدل انتظار اكتمال الإقلاع كله (حتى 3 ثوانٍ) قبل أول طلب شبكة للصور.
   unawaited(_prefetchInitialWallpapers());
 
   // AdMob بمهلة قصوى 3 ثوانٍ حتى لا تتعطل الشاشة على شبكة بطيئة
