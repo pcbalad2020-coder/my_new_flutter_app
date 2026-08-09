@@ -125,6 +125,24 @@ class AdminService {
     return {'sha': sha, 'names': names};
   }
 
+  /// الامتدادات التي يقرأها التطبيق — أي اسم خارجها يُتجاهل عند العرض
+  static const List<String> _allowedExtensions = [
+    '.jpg',
+    '.jpeg',
+    '.png',
+    '.webp'
+  ];
+
+  /// ✅ يضمن أن للاسم امتداد صورة صالحاً. بدون هذا، اسم مثل "61" يُرفع بنجاح
+  /// إلى المستودع لكن التطبيق يتجاهله لأنه يفلتر الملفات بالامتداد.
+  static String _ensureExtension(String name, String fallbackExtension) {
+    final lower = name.toLowerCase();
+    if (_allowedExtensions.any(lower.endsWith)) return name;
+    final clean =
+        name.endsWith('.') ? name.substring(0, name.length - 1) : name;
+    return '$clean$fallbackExtension';
+  }
+
   /// يقترح اسماً رقمياً تالياً حسب نمط التسمية الموجود (1.jpg, 2.jpg ...)
   static String _nextName(List<String> names, String extension) {
     int max = 0;
@@ -148,9 +166,14 @@ class AdminService {
       final manifest = await _readManifest(token, repo);
       final names = (manifest?['names'] as List<String>?) ?? <String>[];
 
+      // امتداد احتياطي صالح دائماً حتى لو جاء من المعرض بصيغة غريبة
+      final safeExtension = _allowedExtensions.contains(extension.toLowerCase())
+          ? extension.toLowerCase()
+          : '.jpg';
+
       final fileName = (customName != null && customName.trim().isNotEmpty)
-          ? customName.trim()
-          : _nextName(names, extension);
+          ? _ensureExtension(customName.trim(), safeExtension)
+          : _nextName(names, safeExtension);
 
       if (names.contains(fileName)) {
         return AdminResult(false, 'الاسم "$fileName" موجود مسبقاً — غيّره');
@@ -469,7 +492,8 @@ class _UploadTabState extends State<_UploadTab> {
                   border: OutlineInputBorder(),
                   isDense: true,
                   labelText: 'اسم الملف (اختياري)',
-                  helperText: 'اتركه فارغاً ليُختار الرقم التالي تلقائياً',
+                  helperText: 'اتركه فارغاً ليُختار الرقم التالي تلقائياً — '
+                      'الامتداد يُضاف تلقائياً إن نسيته',
                 ),
               ),
             ],
