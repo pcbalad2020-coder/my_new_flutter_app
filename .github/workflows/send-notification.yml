@@ -1,0 +1,116 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# إرسال إشعار لكل مستخدمي التطبيق
+# ───────────────────────────────────────────────────────────────────────────
+# مكان الملف:  km2-config/.github/workflows/send-notification.yml
+#
+# يُشغَّل بطريقتين:
+#   1) من لوحة التحكم داخل التطبيق (repository_dispatch)
+#   2) يدوياً من تبويب Actions في GitHub
+#
+# ⚠️ إعداد لمرة واحدة قبل أول استخدام:
+#
+# أ) احصل على مفتاح خدمة Firebase:
+#    Firebase Console ← ⚙️ Project settings ← Service accounts
+#    ← Generate new private key ← سيتحمّل ملف JSON
+#
+# ب) أضفه كسرّ في المستودع km2-config:
+#    Settings ← Secrets and variables ← Actions ← New repository secret
+#    Name:   FIREBASE_SERVICE_ACCOUNT
+#    Value:  الصق محتوى ملف JSON كاملاً
+#
+# ج) أضف سرّاً ثانياً لمعرّف المشروع:
+#    Name:   FIREBASE_PROJECT_ID
+#    Value:  معرّف مشروعك (موجود داخل نفس ملف JSON في الحقل project_id)
+#
+# 🔒 المفتاح يبقى داخل أسرار GitHub ولا يصل التطبيق إليه إطلاقاً.
+# ═══════════════════════════════════════════════════════════════════════════
+
+name: Send Notification
+
+on:
+  repository_dispatch:
+    types: [send_notification]
+  workflow_dispatch:
+    inputs:
+      title:
+        description: 'عنوان الإشعار'
+        required: true
+      body:
+        description: 'نص الإشعار'
+        required: true
+      category:
+        description: 'قسم يُفتح عند الضغط (اختياري)'
+        required: false
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install dependencies
+        run: pip install --quiet google-auth requests
+
+      - name: Send FCM message
+        env:
+          SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
+          TITLE: ${{ github.event.client_payload.title || inputs.title }}
+          BODY: ${{ github.event.client_payload.body || inputs.body }}
+          CATEGORY: ${{ github.event.client_payload.category || inputs.category }}
+        run: |
+          python3 - << 'EOF'
+          import json, os, sys
+          import requests
+          from google.oauth2 import service_account
+          from google.auth.transport.requests import Request
+
+          title = (os.environ.get('TITLE') or '').strip()
+          body  = (os.environ.get('BODY')  or '').strip()
+          category = (os.environ.get('CATEGORY') or '').strip()
+          project_id = (os.environ.get('PROJECT_ID') or '').strip()
+
+          if not title or not body:
+              sys.exit('❌ العنوان والنص مطلوبان')
+          if not project_id:
+              sys.exit('❌ السرّ FIREBASE_PROJECT_ID غير مضبوط')
+
+          try:
+              info = json.loads(os.environ['SERVICE_ACCOUNT'])
+          except Exception as e:
+              sys.exit(f'❌ السرّ FIREBASE_SERVICE_ACCOUNT ليس JSON صالحاً: {e}')
+
+          creds = service_account.Credentials.from_service_account_info(
+              info,
+              scopes=['https://www.googleapis.com/auth/firebase.messaging'],
+          )
+          creds.refresh(Request())
+
+          message = {
+              'topic': 'all_users',
+              'notification': {'title': title, 'body': body},
+              'android': {
+                  'priority': 'high',
+                  'notification': {'channel_id': 'high_importance_channel'},
+              },
+              'apns': {'payload': {'aps': {'sound': 'default'}}},
+          }
+
+          # نفس المفاتيح التي يقرأها التطبيق في _handleNotificationNavigation
+          if category:
+              message['data'] = {'action': 'open_category', 'category': category}
+
+          res = requests.post(
+              f'https://fcm.googleapis.com/v1/projects/{project_id}/messages:send',
+              headers={
+                  'Authorization': f'Bearer {creds.token}',
+                  'Content-Type': 'application/json; UTF-8',
+              },
+              json={'message': message},
+              timeout=30,
+          )
+
+          print('HTTP', res.status_code)
+          print(res.text)
+          if res.status_code != 200:
+              sys.exit('❌ فشل إرسال الإشعار')
+          print(f'✅ أُرسل الإشعار: {title}')
+          EOF

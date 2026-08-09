@@ -1,16 +1,18 @@
 name: km2apps
-description: تطبيق خلفيات عالي الجودة 
+description: تطبيق خلفيات عالي الجودة
 
 environment:
-  sdk: '>=3.0.0 <4.0.0'
+  # ✅ Flutter 3.27+ مطلوب لأن الكود يستخدم Color.withValues(alpha:)
+  sdk: '>=3.6.0 <4.0.0'
+  flutter: '>=3.27.0'
 
 publish_to: 'none'
-version: 1.0.1+15
+version: 1.1.0+17
 
 dependencies:
   flutter:
     sdk: flutter
-  
+
   # Firebase
   firebase_core: ^3.8.1
   firebase_messaging: ^15.1.6
@@ -25,7 +27,6 @@ dependencies:
   shimmer: ^3.0.0
 
   # Network
-  http: ^1.1.2
   dio: ^5.4.0
 
   # Local Data & Utilities
@@ -33,8 +34,11 @@ dependencies:
   shared_preferences: ^2.2.2
   permission_handler: ^11.2.0
   saver_gallery: ^3.0.6
-  share_plus: 12.0.2
+  share_plus: ^12.0.2
   device_info_plus: ^10.1.0
+
+  # لوحة تحكم المشرف — اختيار الصورة من المعرض قبل رفعها
+  image_picker: ^1.1.2
 
 dev_dependencies:
   flutter_test:
@@ -53,7 +57,6 @@ flutter:
   uses-material-design: true
   assets:
     - assets/icon.png
-    - assets/fonts/
 
   fonts:
     - family: Poppins

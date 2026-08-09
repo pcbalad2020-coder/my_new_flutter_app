@@ -20,6 +20,9 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
+// 🔐 لوحة تحكم المشرف (ملف مستقل بجانب main.dart)
+import 'admin_panel.dart';
+
 class AppFonts {
   static TextStyle poppins({
     Color? color,
@@ -4642,6 +4645,52 @@ class CatalogScreen extends StatelessWidget {
 }
 
 // =============================================================================
+// 12.3 🔐 المدخل الخفي للوحة التحكم
+// -----------------------------------------------------------------------------
+// 7 ضغطات متتالية على رقم الإصدار داخل نافذة «عن التطبيق» تفتح لوحة المشرف.
+// اللوحة نفسها لا تعمل بلا توكن GitHub يُدخل يدوياً ويُحفظ على هذا الجهاز فقط،
+// فحتى لو اكتشفها مستخدم آخر بالصدفة سيجدها معطّلة تماماً.
+// =============================================================================
+class _SecretAdminGate extends StatefulWidget {
+  final Widget child;
+  const _SecretAdminGate({required this.child});
+
+  @override
+  State<_SecretAdminGate> createState() => _SecretAdminGateState();
+}
+
+class _SecretAdminGateState extends State<_SecretAdminGate> {
+  int _taps = 0;
+  DateTime _last = DateTime.fromMillisecondsSinceEpoch(0);
+
+  void _onTap() {
+    final now = DateTime.now();
+    // إعادة العد إذا تباطأ المستخدم أكثر من ثانيتين بين ضغطتين
+    _taps = now.difference(_last).inSeconds > 2 ? 1 : _taps + 1;
+    _last = now;
+
+    if (_taps < 7) return;
+    _taps = 0;
+
+    // نلتقط الـ navigator قبل الإغلاق لأن context النافذة يصبح غير صالح بعده
+    final navigator = Navigator.of(context);
+    navigator.pop(); // إغلاق نافذة «عن التطبيق»
+    navigator.push(
+      MaterialPageRoute(builder: (_) => const AdminPanelScreen()),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: _onTap,
+      child: widget.child,
+    );
+  }
+}
+
+// =============================================================================
 // 13. SETTINGS SCREEN
 // =============================================================================
 class SettingsScreen extends StatelessWidget {
@@ -4810,9 +4859,11 @@ class SettingsScreen extends StatelessWidget {
                                     child: const Icon(Icons.wallpaper,
                                         color: Colors.white, size: 40))))),
                     const SizedBox(height: 16),
-                    Text('الإصدار 1.1.0',
-                        style: AppFonts.poppins(
-                            color: Colors.grey[400], fontSize: 13)),
+                    _SecretAdminGate(
+                      child: Text('الإصدار 1.1.0',
+                          style: AppFonts.poppins(
+                              color: Colors.grey[400], fontSize: 13)),
+                    ),
                     const SizedBox(height: 4),
                     Text('تطبيق خلفيات عالي الجودة',
                         style: AppFonts.poppins(
@@ -5177,6 +5228,7 @@ void main() async {
   unawaited(GitHubService.probeThumbProxy());
 
   // ✅ صور أول شاشة تبدأ بالتنزيل فوراً هنا، بالتوازي مع تهيئة AdMob أدناه،
+  // بدل انتظار اكتمال الإقلاع كله (حتى 3 ثوانٍ) قبل أول طلب شبكة للصور.
   unawaited(_prefetchInitialWallpapers());
 
   // AdMob بمهلة قصوى 3 ثوانٍ حتى لا تتعطل الشاشة على شبكة بطيئة
