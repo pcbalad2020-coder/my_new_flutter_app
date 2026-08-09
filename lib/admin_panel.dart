@@ -22,6 +22,10 @@ import 'package:dio/dio.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+// للوصول إلى GitHubService.clearCache() و MainLayout بعد الرفع مباشرة.
+// (استيراد متبادل بين الملفين مسموح تماماً في Dart)
+import 'main.dart';
+
 // ─────────────────────────────────────────────────────────────────────────────
 // الإعدادات الثابتة
 // ─────────────────────────────────────────────────────────────────────────────
@@ -125,6 +129,38 @@ class AdminService {
     return {'sha': sha, 'names': names};
   }
 
+  /// ✅ قراءة أسماء الصور الموجودة فعلياً في المستودع.
+  /// ضرورية عندما لا يوجد files.json: بدونها تظن اللوحة أن المستودع فارغ
+  /// فتقترح الاسم "1.jpg" وهو موجود مسبقاً → خطأ 422 sha wasn't supplied.
+  static Future<List<String>> _listRepoImages(String token, String repo) async {
+    try {
+      final res = await _dio(token).get(
+        '/repos/${AdminConfig.owner}/$repo/contents',
+        queryParameters: {'ref': AdminConfig.branch, 'per_page': 1000},
+      );
+      if (res.statusCode != 200 || res.data is! List) return [];
+      return (res.data as List)
+          .where((item) => item is Map && item['type'] == 'file')
+          .map((item) => item['name'].toString())
+          .where((name) => _allowedExtensions.any(name.toLowerCase().endsWith))
+          .toList();
+    } catch (e) {
+      return [];
+    }
+  }
+
+  /// ترتيب رقمي ذكي: 2.jpg قبل 10.jpg
+  static List<String> _sorted(List<String> names) {
+    final list = [...names];
+    list.sort((a, b) {
+      final ai = int.tryParse(a.split('.').first);
+      final bi = int.tryParse(b.split('.').first);
+      if (ai != null && bi != null) return ai.compareTo(bi);
+      return a.compareTo(b);
+    });
+    return list;
+  }
+
   /// الامتدادات التي يقرأها التطبيق — أي اسم خارجها يُتجاهل عند العرض
   static const List<String> _allowedExtensions = [
     '.jpg',
@@ -132,16 +168,6 @@ class AdminService {
     '.png',
     '.webp'
   ];
-
-  /// ✅ يضمن أن للاسم امتداد صورة صالحاً. بدون هذا، اسم مثل "61" يُرفع بنجاح
-  /// إلى المستودع لكن التطبيق يتجاهله لأنه يفلتر الملفات بالامتداد.
-  static String _ensureExtension(String name, String fallbackExtension) {
-    final lower = name.toLowerCase();
-    if (_allowedExtensions.any(lower.endsWith)) return name;
-    final clean =
-        name.endsWith('.') ? name.substring(0, name.length - 1) : name;
-    return '$clean$fallbackExtension';
-  }
 
   /// يقترح اسماً رقمياً تالياً حسب نمط التسمية الموجود (1.jpg, 2.jpg ...)
   static String _nextName(List<String> names, String extension) {
@@ -154,72 +180,83 @@ class AdminService {
     return '${max + 1}$extension';
   }
 
-  /// رفع صورة + تحديث files.json
+  /// رفع صورة باسم تلقائي + تحديث (أو إنشاء) files.json
   static Future<AdminResult> uploadImage({
     required String token,
     required String repo,
     required List<int> bytes,
     required String extension,
-    String? customName,
   }) async {
     try {
+      // مصدران للأسماء: files.json + محتوى المستودع الفعلي.
+      // الاعتماد على واحد فقط كان يسبب اقتراح اسم موجود مسبقاً (خطأ 422).
       final manifest = await _readManifest(token, repo);
-      final names = (manifest?['names'] as List<String>?) ?? <String>[];
+      final manifestNames =
+          (manifest?['names'] as List<String>?) ?? const <String>[];
+      final repoNames = await _listRepoImages(token, repo);
+      final known = <String>{...manifestNames, ...repoNames};
 
-      // امتداد احتياطي صالح دائماً حتى لو جاء من المعرض بصيغة غريبة
       final safeExtension = _allowedExtensions.contains(extension.toLowerCase())
           ? extension.toLowerCase()
           : '.jpg';
 
-      final fileName = (customName != null && customName.trim().isNotEmpty)
-          ? _ensureExtension(customName.trim(), safeExtension)
-          : _nextName(names, safeExtension);
+      // محاولات متعددة تحسباً لاسم محجوز لم يظهر في أي من المصدرين
+      String fileName = _nextName(known.toList(), safeExtension);
+      Response? upload;
 
-      if (names.contains(fileName)) {
-        return AdminResult(false, 'الاسم "$fileName" موجود مسبقاً — غيّره');
+      for (int attempt = 1; attempt <= 4; attempt++) {
+        upload = await _dio(token).put(
+          '/repos/${AdminConfig.owner}/$repo/contents/$fileName',
+          data: {
+            'message': 'add $fileName via admin panel',
+            'content': base64Encode(bytes),
+            'branch': AdminConfig.branch,
+          },
+        );
+
+        // 422 = الاسم موجود بالفعل → جرّب الرقم التالي
+        if (upload.statusCode == 422) {
+          known.add(fileName);
+          fileName = _nextName(known.toList(), safeExtension);
+          continue;
+        }
+        break;
       }
 
-      // 1) رفع الصورة
-      final upload = await _dio(token).put(
-        '/repos/${AdminConfig.owner}/$repo/contents/$fileName',
+      if (upload == null ||
+          (upload.statusCode != 201 && upload.statusCode != 200)) {
+        final code = upload?.statusCode;
+        final msg = upload?.data is Map ? upload!.data['message'] : '';
+        return AdminResult(false, 'فشل رفع الصورة ($code) $msg');
+      }
+
+      // تحديث files.json — أو إنشاؤه من الصفر إن كان مفقوداً
+      final updated = _sorted({...known, fileName}.toList());
+      final res = await _dio(token).put(
+        '/repos/${AdminConfig.owner}/$repo/contents/files.json',
         data: {
-          'message': 'add $fileName via admin panel',
-          'content': base64Encode(bytes),
+          'message': manifest == null
+              ? 'create files.json via admin panel'
+              : 'update files.json ($fileName)',
+          'content': base64Encode(
+              utf8.encode(const JsonEncoder.withIndent('').convert(updated))),
+          // sha مطلوب للتحديث فقط ويجب ألا يُرسل عند الإنشاء
+          if (manifest != null) 'sha': manifest['sha'],
           'branch': AdminConfig.branch,
         },
       );
 
-      if (upload.statusCode != 201 && upload.statusCode != 200) {
-        final msg = upload.data is Map ? upload.data['message'] : '';
-        return AdminResult(false, 'فشل رفع الصورة (${upload.statusCode}) $msg');
+      if (res.statusCode != 200 && res.statusCode != 201) {
+        final msg = res.data is Map ? res.data['message'] : '';
+        return AdminResult(
+            true, 'رُفعت "$fileName" ✅ لكن تحديث files.json فشل ($msg)');
       }
 
-      // 2) تحديث files.json (إن وُجد)
-      if (manifest != null) {
-        final updated = [...names, fileName]..sort((a, b) {
-            final ai = int.tryParse(a.split('.').first);
-            final bi = int.tryParse(b.split('.').first);
-            if (ai != null && bi != null) return ai.compareTo(bi);
-            return a.compareTo(b);
-          });
-
-        final res = await _dio(token).put(
-          '/repos/${AdminConfig.owner}/$repo/contents/files.json',
-          data: {
-            'message': 'update files.json ($fileName)',
-            'content': base64Encode(
-                utf8.encode(const JsonEncoder.withIndent('').convert(updated))),
-            'sha': manifest['sha'],
-            'branch': AdminConfig.branch,
-          },
-        );
-        if (res.statusCode != 200 && res.statusCode != 201) {
-          return AdminResult(true,
-              'رُفعت الصورة "$fileName" ✅ لكن تحديث files.json فشل — سيصلحه الـ workflow تلقائياً');
-        }
-      }
-
-      return AdminResult(true, 'تم رفع "$fileName" وتحديث القائمة ✅');
+      return AdminResult(
+          true,
+          manifest == null
+              ? 'تم رفع "$fileName" وإنشاء files.json بـ ${updated.length} صورة ✅'
+              : 'تم رفع "$fileName" ✅ (${updated.length} صورة في القسم)');
     } catch (e) {
       return AdminResult(false, 'خطأ أثناء الرفع: $e');
     }
@@ -348,19 +385,12 @@ class _UploadTab extends StatefulWidget {
 }
 
 class _UploadTabState extends State<_UploadTab> {
-  final TextEditingController _nameCtrl = TextEditingController();
   String _repoLabel = AdminConfig.repos.keys.first;
   XFile? _picked;
   List<int>? _bytes;
   bool _busy = false;
   String? _status;
   bool _statusOk = false;
-
-  @override
-  void dispose() {
-    _nameCtrl.dispose();
-    super.dispose();
-  }
 
   Future<void> _pick() async {
     try {
@@ -417,8 +447,10 @@ class _UploadTabState extends State<_UploadTab> {
       repo: AdminConfig.repos[_repoLabel]!,
       bytes: _bytes!,
       extension: ext,
-      customName: _nameCtrl.text,
     );
+
+    // ✅ مسح الكاش فور النجاح حتى تُقرأ القائمة الجديدة بدل المخزّنة (6 ساعات)
+    if (result.ok) GitHubService.clearCache();
 
     if (!mounted) return;
     setState(() {
@@ -428,9 +460,16 @@ class _UploadTabState extends State<_UploadTab> {
       if (result.ok) {
         _picked = null;
         _bytes = null;
-        _nameCtrl.clear();
       }
     });
+  }
+
+  /// إعادة بناء واجهة التطبيق من الصفر لتظهر الصورة فوراً بلا إعادة تشغيل
+  void _openApp() {
+    Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const MainLayout()),
+      (route) => false,
+    );
   }
 
   @override
@@ -484,18 +523,6 @@ class _UploadTabState extends State<_UploadTab> {
                 icon: const Icon(Icons.photo_library_outlined),
                 label: Text(_picked == null ? 'اختر صورة' : 'تغيير الصورة'),
               ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _nameCtrl,
-                style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(
-                  border: OutlineInputBorder(),
-                  isDense: true,
-                  labelText: 'اسم الملف (اختياري)',
-                  helperText: 'اتركه فارغاً ليُختار الرقم التالي تلقائياً — '
-                      'الامتداد يُضاف تلقائياً إن نسيته',
-                ),
-              ),
             ],
           ),
         ),
@@ -519,10 +546,24 @@ class _UploadTabState extends State<_UploadTab> {
           const SizedBox(height: 16),
           _StatusBox(ok: _statusOk, message: _status!),
         ],
+        if (_statusOk && _status != null) ...[
+          const SizedBox(height: 12),
+          ElevatedButton.icon(
+            onPressed: _openApp,
+            icon: const Icon(Icons.visibility),
+            label: const Text('عرض الصورة في التطبيق الآن'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green[700],
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 14),
+            ),
+          ),
+        ],
         const SizedBox(height: 16),
         const _HintBox(
-          text: 'بعد الرفع بنجاح: امسح الكاش من الإعدادات ثم أعد فتح التطبيق '
-              'لتظهر الصورة الجديدة (الكاش يبقى 6 ساعات).',
+          text: 'الاسم يُختار تلقائياً (الرقم التالي بعد أكبر رقم موجود). '
+              'بعد الرفع يُمسح الكاش فوراً، واضغط زر العرض لإعادة بناء '
+              'الواجهة فتظهر الصورة مباشرة بلا إعادة تشغيل.',
         ),
       ],
     );
