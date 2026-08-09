@@ -187,6 +187,20 @@ class AdminService {
     required List<int> bytes,
     required String extension,
   }) async {
+    // ✅ حارس أساسي: رفع مصفوفة فارغة ينتج ملفاً بحجم 0 بايت على GitHub
+    // يبدو ناجحاً لكنه صورة معطوبة. يحدث على iPhone حين تكون الصورة في
+    // iCloud ولم تُنزَّل على الجهاز بعد (خيار Optimize iPhone Storage).
+    if (bytes.isEmpty) {
+      return const AdminResult(
+          false,
+          'الملف فارغ (0 بايت) — الصورة على iCloud ولم تُنزَّل بعد. '
+          'افتحها في تطبيق الصور حتى تكتمل ثم أعد المحاولة');
+    }
+    if (bytes.length < 1024) {
+      return AdminResult(false,
+          'حجم الملف ${bytes.length} بايت فقط — يبدو تالفاً، اختر صورة أخرى');
+    }
+
     try {
       // مصدران للأسماء: files.json + محتوى المستودع الفعلي.
       // الاعتماد على واحد فقط كان يسبب اقتراح اسم موجود مسبقاً (خطأ 422).
@@ -401,9 +415,23 @@ class _UploadTabState extends State<_UploadTab> {
       if (file == null) return;
       final bytes = await file.readAsBytes();
       if (!mounted) return;
+
+      if (bytes.isEmpty) {
+        setState(() {
+          _picked = null;
+          _bytes = null;
+          _statusOk = false;
+          _status = 'تعذّرت قراءة الصورة (0 بايت) — غالباً لأنها مخزّنة في '
+              'iCloud ولم تُنزَّل. افتحها في تطبيق الصور وانتظر اكتمالها '
+              'ثم أعد المحاولة';
+        });
+        return;
+      }
+
       setState(() {
         _picked = file;
         _bytes = bytes;
+        _statusOk = false;
         _status = null;
       });
     } catch (e) {
@@ -528,7 +556,8 @@ class _UploadTabState extends State<_UploadTab> {
         ),
         const SizedBox(height: 16),
         ElevatedButton.icon(
-          onPressed: _busy ? null : _upload,
+          onPressed:
+              (_busy || _bytes == null || _bytes!.isEmpty) ? null : _upload,
           icon: _busy
               ? const SizedBox(
                   width: 18,

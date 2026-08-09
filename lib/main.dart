@@ -2285,7 +2285,8 @@ class WallpaperCard extends StatelessWidget {
                 NetImage(
                     url: wallpaper.thumbnailUrl,
                     fallbackUrl: wallpaper.fallbackUrl,
-                    memWidth: 400),
+                    // عرض البطاقة الفعلي ~110-180 بكسل منطقي، فـ320 وفير
+                    memWidth: 320),
                 const _BottomScrim(),
                 Positioned(
                     bottom: 10,
@@ -2336,7 +2337,7 @@ class WallpaperCard169 extends StatelessWidget {
               NetImage(
                   url: wallpaper.thumbnailUrl,
                   fallbackUrl: wallpaper.fallbackUrl,
-                  memWidth: 700),
+                  memWidth: 560),
               const _BottomScrim(),
               Positioned(
                   bottom: 10,
@@ -2794,7 +2795,11 @@ class _PreviewScreenState extends State<PreviewScreen> {
     // (قد تكون 4K+) — يقلّل زمن ووزن فك الترميز فتظهر الصورة أسرع وبسلاسة
     // أكبر أثناء التمرير، دون التأثير على جودة ملف التحميل الفعلي لاحقاً.
     final media = MediaQuery.of(context);
-    final decodeWidth = (media.size.width * media.devicePixelRatio).round();
+    // ✅ سقف 1080: بدونه تُفكّ الصورة بعرض 1242 على iPhone = ~13 ميجابايت
+    // للصورة الواحدة، ومع الصفحتين المجاورتين المحمّلتين مسبقاً تتجاوز
+    // الذاكرة حدّ النظام فيُقتل التطبيق بصمت أثناء التمرير.
+    final rawWidth = (media.size.width * media.devicePixelRatio).round();
+    final decodeWidth = rawWidth > 1080 ? 1080 : rawWidth;
     return Scaffold(
       backgroundColor: Colors.black,
       body: PageView.builder(
@@ -3015,8 +3020,27 @@ class _WallpaperGridLoaderState extends State<_WallpaperGridLoader>
     with AutomaticKeepAliveClientMixin {
   late Future<List<WallpaperModel>> _future;
 
+  // ✅ تحميل تدريجي: تُبنى 20 صورة فقط في البداية ثم 20 مع كل وصول للنهاية.
+  // الهدف تقليل عدد الصور المفكوكة في الذاكرة دفعة واحدة — وهو سبب إغلاق
+  // iOS للتطبيق تلقائياً (jetsam) في الأقسام الكبيرة.
+  static const int _pageSize = 20;
+  int _visible = _pageSize;
+
   @override
   bool get wantKeepAlive => true;
+
+  /// يُستدعى مع كل تمرير: يزيد المعروض عند الاقتراب من نهاية القائمة
+  bool _onScroll(ScrollNotification notification, int total) {
+    if (_visible >= total) return false;
+    final metrics = notification.metrics;
+    if (metrics.pixels >= metrics.maxScrollExtent - 600) {
+      setState(() {
+        final next = _visible + _pageSize;
+        _visible = next > total ? total : next;
+      });
+    }
+    return false;
+  }
 
   @override
   void initState() {
@@ -3027,7 +3051,10 @@ class _WallpaperGridLoaderState extends State<_WallpaperGridLoader>
   Future<void> _refresh() async {
     GitHubService.clearCache();
     if (!mounted) return;
-    setState(() => _future = GitHubService.futureOf(widget.categoryName));
+    setState(() {
+      _visible = _pageSize;
+      _future = GitHubService.futureOf(widget.categoryName);
+    });
     await _future;
   }
 
@@ -3082,62 +3109,85 @@ class _WallpaperGridLoaderState extends State<_WallpaperGridLoader>
               ]));
         }
         final wallpapers = snapshot.data!;
+        final total = wallpapers.length;
+        final shown = _visible > total ? total : _visible;
+
         return Column(children: [
           const ResponsiveBannerAdWidget(),
           Expanded(
-            child: RefreshIndicator(
-              onRefresh: _refresh,
-              color: Colors.blueAccent,
-              child: widget.isLandscape
-                  ? ListView.builder(
-                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
-                      itemCount: wallpapers.length,
-                      cacheExtent: 600,
-                      addAutomaticKeepAlives: false,
-                      itemBuilder: (context, index) {
-                        final heroTag =
-                            'grid_${widget.categoryName}_${wallpapers[index].id}_$index';
-                        return Padding(
-                            padding: const EdgeInsets.only(bottom: 12),
-                            child: AspectRatio(
-                                aspectRatio: 16 / 9,
-                                child: RepaintBoundary(
-                                  child: WallpaperCard169(
-                                      wallpaper: wallpapers[index],
-                                      heroTag: heroTag,
-                                      onTap: () => _navigateWithAd(
-                                          wallpapers[index],
-                                          heroTag,
-                                          wallpapers,
-                                          index)),
-                                )));
-                      },
-                    )
-                  : GridView.builder(
-                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
-                      cacheExtent: 700,
-                      addAutomaticKeepAlives: false,
-                      gridDelegate:
-                          const SliverGridDelegateWithFixedCrossAxisCount(
-                              crossAxisCount: 2,
-                              childAspectRatio: 0.65,
-                              crossAxisSpacing: 12,
-                              mainAxisSpacing: 12),
-                      itemCount: wallpapers.length,
-                      itemBuilder: (context, index) {
-                        final heroTag =
-                            'grid_${widget.categoryName}_${wallpapers[index].id}_$index';
-                        return RepaintBoundary(
-                          child: WallpaperCard(
-                              wallpaper: wallpapers[index],
-                              heroTag: heroTag,
-                              onTap: () => _navigateWithAd(wallpapers[index],
-                                  heroTag, wallpapers, index)),
-                        );
-                      },
-                    ),
+            child: NotificationListener<ScrollNotification>(
+              onNotification: (n) => _onScroll(n, total),
+              child: RefreshIndicator(
+                onRefresh: _refresh,
+                color: Colors.blueAccent,
+                child: widget.isLandscape
+                    ? ListView.builder(
+                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
+                        itemCount: shown,
+                        cacheExtent: 400,
+                        addAutomaticKeepAlives: false,
+                        itemBuilder: (context, index) {
+                          final heroTag =
+                              'grid_${widget.categoryName}_${wallpapers[index].id}_$index';
+                          return Padding(
+                              padding: const EdgeInsets.only(bottom: 12),
+                              child: AspectRatio(
+                                  aspectRatio: 16 / 9,
+                                  child: RepaintBoundary(
+                                    child: WallpaperCard169(
+                                        wallpaper: wallpapers[index],
+                                        heroTag: heroTag,
+                                        onTap: () => _navigateWithAd(
+                                            wallpapers[index],
+                                            heroTag,
+                                            wallpapers,
+                                            index)),
+                                  )));
+                        },
+                      )
+                    : GridView.builder(
+                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
+                        cacheExtent: 400,
+                        addAutomaticKeepAlives: false,
+                        gridDelegate:
+                            const SliverGridDelegateWithFixedCrossAxisCount(
+                                crossAxisCount: 2,
+                                childAspectRatio: 0.65,
+                                crossAxisSpacing: 12,
+                                mainAxisSpacing: 12),
+                        itemCount: shown,
+                        itemBuilder: (context, index) {
+                          final heroTag =
+                              'grid_${widget.categoryName}_${wallpapers[index].id}_$index';
+                          return RepaintBoundary(
+                            child: WallpaperCard(
+                                wallpaper: wallpapers[index],
+                                heroTag: heroTag,
+                                onTap: () => _navigateWithAd(wallpapers[index],
+                                    heroTag, wallpapers, index)),
+                          );
+                        },
+                      ),
+              ),
             ),
           ),
+          // مؤشر صغير يوضّح أن هناك المزيد قادماً
+          if (shown < total)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 92, top: 4),
+              child:
+                  Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                const SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: Colors.blueAccent)),
+                const SizedBox(width: 8),
+                Text('$shown من $total',
+                    style: AppFonts.poppins(
+                        color: Colors.grey[500], fontSize: 12)),
+              ]),
+            ),
         ]);
       },
     );
@@ -3181,7 +3231,7 @@ class HomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return CustomScrollView(cacheExtent: 600, slivers: [
+    return CustomScrollView(cacheExtent: 300, slivers: [
       SliverAppBar(
         floating: true,
         snap: true,
@@ -3640,7 +3690,7 @@ class _TopAutoSlider169State extends State<_TopAutoSlider169> {
                           child: NetImage(
                             url: wallpaper.thumbnailUrl,
                             fallbackUrl: wallpaper.fallbackUrl,
-                            memWidth: 800,
+                            memWidth: 640,
                           ),
                         ),
                       ),
@@ -5209,6 +5259,11 @@ Future<void> _initFirebaseAndNotifications() async {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // ✅ حدّ كاش الصور: الافتراضي 100 ميجابايت، وهو سبب رئيسي لقتل iOS للتطبيق
+  // (jetsam) عند التمرير في أقسام فيها صور 4K. 60 ميجابايت كافية تماماً.
+  PaintingBinding.instance.imageCache.maximumSizeBytes = 60 << 20;
+  PaintingBinding.instance.imageCache.maximumSize = 100;
 
   FlutterError.onError = (FlutterErrorDetails details) {
     FlutterError.presentError(details);
