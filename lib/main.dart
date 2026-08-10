@@ -760,6 +760,12 @@ class WallpaperModel {
   /// حتى لو حُجب أحد النطاقين على شبكة المستخدم.
   final String fallbackUrl;
 
+  /// ✅ رابط المصغّر الحقيقي (thumbs/*.webp بعرض 480 ≈ 35 كيلوبايت) الذي
+  /// يولّده GitHub Action. إن كان فارغاً نعود للصورة الأصلية كما كان سابقاً.
+  /// هذا أهم فرق للأداء: الشبكات كانت تحمّل ملفات 4K كاملة (2-3 ميجابايت)
+  /// لكل مربّع صغير، وهو سبب البطء وخروج التطبيق على iOS.
+  final String thumbUrl;
+
   final String category;
   final String repository;
   final int width;
@@ -771,6 +777,7 @@ class WallpaperModel {
     required this.title,
     required this.imageUrl,
     this.fallbackUrl = '',
+    this.thumbUrl = '',
     required this.category,
     required this.repository,
     required this.width,
@@ -783,6 +790,7 @@ class WallpaperModel {
         'title': title,
         'imageUrl': imageUrl,
         'fallbackUrl': fallbackUrl,
+        'thumbUrl': thumbUrl,
         'category': category,
         'repository': repository,
         'width': width,
@@ -795,6 +803,7 @@ class WallpaperModel {
         title: json['title'] as String? ?? '',
         imageUrl: json['imageUrl'] as String? ?? '',
         fallbackUrl: json['fallbackUrl'] as String? ?? '',
+        thumbUrl: json['thumbUrl'] as String? ?? '',
         category: json['category'] as String? ?? '',
         repository: json['repository'] as String? ?? '',
         width: json['width'] as int? ?? 1080,
@@ -808,8 +817,13 @@ class WallpaperModel {
   /// ✅ يُحسب وقت العرض لا وقت الإنشاء: لو تبيّن أن وسيط الضغط غير متاح على
   /// شبكة المستخدم يعود تلقائياً للرابط الأصلي بلا حاجة لإعادة جلب أي شيء،
   /// كما أن المفضلة المحفوظة لا تعلق على رابط وسيط قديم.
-  String get thumbnailUrl =>
-      GitHubService.thumbUrl(imageUrl, width: isLandscape ? 700 : 400);
+  String get thumbnailUrl => thumbUrl.isNotEmpty
+      ? thumbUrl
+      : GitHubService.thumbUrl(imageUrl, width: isLandscape ? 700 : 400);
+
+  /// الاحتياطي المناسب للعرض: إن فشل المصغّر نعود للصورة الأصلية نفسها،
+  /// وإلا نعود للنطاق الآخر (jsDelivr).
+  String get displayFallbackUrl => thumbUrl.isNotEmpty ? imageUrl : fallbackUrl;
 }
 
 class CategoryModel {
@@ -1021,6 +1035,9 @@ class GitHubService {
         ? decoded
         : (decoded is Map ? (decoded['files'] as List? ?? []) : const []);
 
+    // ✅ يضع الـ workflow العلامة thumbs:true بعد توليد مجلد المصغّرات
+    final hasThumbs = decoded is Map && decoded['thumbs'] == true;
+
     return rawList.map((e) => e.toString()).where((path) {
       final lower = path.toLowerCase();
       return lower.endsWith('.jpg') ||
@@ -1029,12 +1046,19 @@ class GitHubService {
           lower.endsWith('.webp');
     }).map((path) {
       final clean = path.startsWith('/') ? path.substring(1) : path;
+      final fileName = clean.split('/').last;
       return {
-        'name': clean.split('/').last,
+        'name': fileName,
         'download_url': _toJsDelivr(
             owner: _owner, repo: repoName, branch: _branch, path: clean),
         'raw_url': _toRawGithub(
             owner: _owner, repo: repoName, branch: _branch, path: clean),
+        if (hasThumbs)
+          'thumb_url': _toRawGithub(
+              owner: _owner,
+              repo: repoName,
+              branch: _branch,
+              path: 'thumbs/$fileName.webp'),
         'type': 'file',
       };
     }).toList();
@@ -1361,6 +1385,7 @@ class GitHubService {
       final name = file['name'] as String? ?? 'unnamed';
       final jsDelivrUrl = file['download_url'] as String? ?? '';
       final rawUrl = file['raw_url'] as String? ?? '';
+      final thumb = file['thumb_url'] as String? ?? '';
       // ✅ عكس الأولوية بناءً على قياس فعلي: روابط cdn.jsdelivr.net كانت
       // «تتعلّق بلا رد» على شبكة المستخدم (سطور ⌛ Image stalled في اللوج)
       // بينما raw.githubusercontent استجاب فوراً. لذا raw هو الأساسي الآن
@@ -1373,6 +1398,7 @@ class GitHubService {
             RegExp(r'\.(jpg|jpeg|png|webp)$', caseSensitive: false), ''),
         imageUrl: primaryUrl,
         fallbackUrl: secondaryUrl,
+        thumbUrl: thumb,
         category: categoryName,
         repository: repoName,
         width: is169 ? 1920 : 1080,
@@ -2088,6 +2114,41 @@ class SolidPanel extends StatelessWidget {
   }
 }
 
+// =============================================================================
+// 🚦 IMAGE GATE — بوابة التنزيل المتزامن
+// -----------------------------------------------------------------------------
+// المشكلة الجذرية للبطء وخروج التطبيق على iOS: عند فتح قسم تبدأ 20 صورة
+// بالتنزيل في اللحظة نفسها، وكل واحدة 2-3 ميجابايت → ~50 ميجابايت في الذاكرة
+// دفعة واحدة قبل أن يُفكّ ترميز أي منها. النظام يقتل التطبيق قبل أن يكمل.
+//
+// الحل: 4 صور فقط تُنزَّل في وقت واحد، والباقي ينتظر دوره في طابور. النتيجة
+// أن الذروة تنخفض من ~50 ميجابايت إلى ~10، ويظل التمرير سلساً لأن الصور
+// تصل تباعاً بدل أن تتزاحم كلها على الشبكة والذاكرة معاً.
+// =============================================================================
+class _ImageGate {
+  static const int _maxConcurrent = 4;
+  static int _active = 0;
+  static final List<Completer<void>> _waiting = [];
+
+  static Future<void> acquire() {
+    if (_active < _maxConcurrent) {
+      _active++;
+      return Future.value();
+    }
+    final completer = Completer<void>();
+    _waiting.add(completer);
+    return completer.future;
+  }
+
+  static void release() {
+    if (_waiting.isNotEmpty) {
+      _waiting.removeAt(0).complete();
+    } else if (_active > 0) {
+      _active--;
+    }
+  }
+}
+
 /// ✅ صورة شبكية مع تراجع تلقائي: إذا فشل رابط المصغّر (وسيط خارجي محجوب
 /// مثلاً) تُجرَّب الصورة الأصلية بدل ترك مكان فارغ أو تحميل لا ينتهي.
 class NetImage extends StatefulWidget {
@@ -2110,6 +2171,8 @@ class NetImage extends StatefulWidget {
 class _NetImageState extends State<NetImage> {
   Timer? _watchdog;
   bool _useFallback = false;
+  bool _hasSlot = false; // هل نحجز مكاناً في بوابة التنزيل الآن؟
+  bool _ready = false; // هل حان دورنا لبدء التحميل؟
 
   String get _primary =>
       widget.url.isNotEmpty ? widget.url : widget.fallbackUrl;
@@ -2119,7 +2182,24 @@ class _NetImageState extends State<NetImage> {
   @override
   void initState() {
     super.initState();
+    _requestSlot();
+  }
+
+  Future<void> _requestSlot() async {
+    await _ImageGate.acquire();
+    if (!mounted) {
+      _ImageGate.release();
+      return;
+    }
+    _hasSlot = true;
+    setState(() => _ready = true);
     _startWatchdog();
+  }
+
+  void _releaseSlot() {
+    if (!_hasSlot) return;
+    _hasSlot = false;
+    _ImageGate.release();
   }
 
   @override
@@ -2138,7 +2218,7 @@ class _NetImageState extends State<NetImage> {
   /// ثوانٍ بلا صورة ننتقل تلقائياً إلى الرابط الأصلي المباشر.
   void _startWatchdog() {
     if (!_hasFallback) return;
-    _watchdog = Timer(const Duration(seconds: 5), () {
+    _watchdog = Timer(const Duration(seconds: 4), () {
       if (!mounted || _useFallback) return;
       AppLogger.warning('⌛ Image stalled, switching to direct URL: $_primary');
       setState(() => _useFallback = true);
@@ -2153,11 +2233,15 @@ class _NetImageState extends State<NetImage> {
   @override
   void dispose() {
     _cancelWatchdog();
+    _releaseSlot();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    // ننتظر دورنا في البوابة قبل إنشاء أي طلب شبكة
+    if (!_ready) return const ShimmerLoadingCard();
+
     final url = _useFallback ? widget.fallbackUrl : _primary;
     return CachedNetworkImage(
       imageUrl: url,
@@ -2169,11 +2253,13 @@ class _NetImageState extends State<NetImage> {
       fadeInDuration: const Duration(milliseconds: 120),
       imageBuilder: (context, provider) {
         _cancelWatchdog();
+        _releaseSlot(); // اكتمل التحميل → أفسح المجال لصورة أخرى
         return Image(image: provider, fit: widget.fit);
       },
       placeholder: (_, __) => const ShimmerLoadingCard(),
       errorWidget: (context, failedUrl, error) {
         AppLogger.error('❌ Image failed: $failedUrl | $error');
+        if (_useFallback || !_hasFallback) _releaseSlot();
         if (!_useFallback && _hasFallback) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) setState(() => _useFallback = true);
@@ -2284,7 +2370,7 @@ class WallpaperCard extends StatelessWidget {
               children: [
                 NetImage(
                     url: wallpaper.thumbnailUrl,
-                    fallbackUrl: wallpaper.fallbackUrl,
+                    fallbackUrl: wallpaper.displayFallbackUrl,
                     // عرض البطاقة الفعلي ~110-180 بكسل منطقي، فـ320 وفير
                     memWidth: 320),
                 const _BottomScrim(),
@@ -2336,7 +2422,7 @@ class WallpaperCard169 extends StatelessWidget {
             children: [
               NetImage(
                   url: wallpaper.thumbnailUrl,
-                  fallbackUrl: wallpaper.fallbackUrl,
+                  fallbackUrl: wallpaper.displayFallbackUrl,
                   memWidth: 560),
               const _BottomScrim(),
               Positioned(
@@ -2799,16 +2885,16 @@ class _PreviewScreenState extends State<PreviewScreen> {
     // للصورة الواحدة، ومع الصفحتين المجاورتين المحمّلتين مسبقاً تتجاوز
     // الذاكرة حدّ النظام فيُقتل التطبيق بصمت أثناء التمرير.
     final rawWidth = (media.size.width * media.devicePixelRatio).round();
-    final decodeWidth = rawWidth > 1080 ? 1080 : rawWidth;
+    final decodeWidth = rawWidth > 900 ? 900 : rawWidth;
     return Scaffold(
       backgroundColor: Colors.black,
       body: PageView.builder(
         controller: _pageController,
         onPageChanged: (index) => setState(() => _currentIndex = index),
         itemCount: widget.wallpapers.length,
-        // ✅ يجعل فلاتر تبني الصفحة التالية/السابقة مسبقاً (وبالتالي تبدأ
-        // صورتها بالتنزيل) قبل أن يصل إليها المستخدم بالتمرير فعلياً.
-        allowImplicitScrolling: true,
+        // ⚠️ مُعطَّل عمداً: كان يحمّل الصفحتين المجاورتين مسبقاً، أي ثلاث
+        // صور كاملة في الذاكرة معاً (~30 ميجابايت) — ثمن باهظ لتسريع بسيط.
+        allowImplicitScrolling: false,
         itemBuilder: (context, index) {
           final wallpaper = widget.wallpapers[index];
           // ✅ الصورة الكاملة أيضاً تستفيد من التراجع التلقائي بين النطاقين
@@ -3122,9 +3208,11 @@ class _WallpaperGridLoaderState extends State<_WallpaperGridLoader>
                 color: Colors.blueAccent,
                 child: widget.isLandscape
                     ? ListView.builder(
+                        key: PageStorageKey<String>(
+                            'list_${widget.categoryName}'),
                         padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
                         itemCount: shown,
-                        cacheExtent: 400,
+                        cacheExtent: 250,
                         addAutomaticKeepAlives: false,
                         itemBuilder: (context, index) {
                           final heroTag =
@@ -3146,8 +3234,10 @@ class _WallpaperGridLoaderState extends State<_WallpaperGridLoader>
                         },
                       )
                     : GridView.builder(
+                        key: PageStorageKey<String>(
+                            'grid_${widget.categoryName}'),
                         padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
-                        cacheExtent: 400,
+                        cacheExtent: 250,
                         addAutomaticKeepAlives: false,
                         gridDelegate:
                             const SliverGridDelegateWithFixedCrossAxisCount(
@@ -3231,76 +3321,85 @@ class HomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return CustomScrollView(cacheExtent: 300, slivers: [
-      SliverAppBar(
-        floating: true,
-        snap: true,
-        backgroundColor: Colors.transparent,
-        title: Text('KM2 Wallpapers',
-            style: AppFonts.poppins(
-                fontWeight: FontWeight.bold,
-                fontSize: 24,
-                color: Colors.white)),
-        actions: [
-          Consumer<CoinsProvider>(
-            builder: (context, coins, _) => Container(
-              margin: const EdgeInsets.only(right: 8),
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                  color: Colors.amber.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(20),
-                  border:
-                      Border.all(color: Colors.amber.withValues(alpha: 0.4))),
-              child: Row(mainAxisSize: MainAxisSize.min, children: [
-                const Icon(Icons.monetization_on,
-                    color: Colors.amber, size: 18),
-                const SizedBox(width: 4),
-                Text('${coins.coins}',
-                    style: AppFonts.poppins(
-                        color: Colors.amber,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14))
-              ]),
-            ),
+    return CustomScrollView(
+        key: const PageStorageKey<String>('home_scroll'),
+        cacheExtent: 300,
+        slivers: [
+          SliverAppBar(
+            floating: true,
+            snap: true,
+            backgroundColor: Colors.transparent,
+            title: Text('KM2 Wallpapers',
+                style: AppFonts.poppins(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 24,
+                    color: Colors.white)),
+            actions: [
+              Consumer<CoinsProvider>(
+                builder: (context, coins, _) => Container(
+                  margin: const EdgeInsets.only(right: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                      color: Colors.amber.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                          color: Colors.amber.withValues(alpha: 0.4))),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    const Icon(Icons.monetization_on,
+                        color: Colors.amber, size: 18),
+                    const SizedBox(width: 4),
+                    Text('${coins.coins}',
+                        style: AppFonts.poppins(
+                            color: Colors.amber,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14))
+                  ]),
+                ),
+              ),
+              IconButton(
+                  icon: const Icon(Icons.favorite_border, color: Colors.white),
+                  onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => const FavoritesScreen()))),
+              IconButton(
+                  icon:
+                      const Icon(Icons.settings_outlined, color: Colors.white),
+                  onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => const SettingsScreen()))),
+            ],
           ),
-          IconButton(
-              icon: const Icon(Icons.favorite_border, color: Colors.white),
-              onPressed: () => Navigator.push(context,
-                  MaterialPageRoute(builder: (_) => const FavoritesScreen()))),
-          IconButton(
-              icon: const Icon(Icons.settings_outlined, color: Colors.white),
-              onPressed: () => Navigator.push(context,
-                  MaterialPageRoute(builder: (_) => const SettingsScreen()))),
-        ],
-      ),
-      const SliverToBoxAdapter(child: _TopAutoSlider169()),
-      const SliverToBoxAdapter(
-          child: Padding(
-              padding: EdgeInsets.symmetric(vertical: 8),
-              child: Center(child: SmartBannerAdWidget()))),
-      _sectionHeader(context, 'New', 'New'),
-      _horizontalList(context, 'New'),
-      _sectionHeader(context, 'Sport', 'Sport'),
-      _horizontalList(context, 'Sport'),
-      _sectionHeader(context, 'Anime', 'Anime'),
-      _horizontalList(context, 'Anime'),
-      _sectionHeader(context, 'Cars', 'Cars'),
-      _horizontalList(context, 'Cars'),
-      _sectionHeader(context, 'Nature', 'Nature'),
-      _horizontalList(context, 'Nature'),
-      _sectionHeader(context, 'Space', 'Space'),
-      _horizontalList(context, 'Space'),
-      _sectionHeader(context, '16:9', '16:9'),
-      _horizontalList(context, '16:9'),
-      _sectionHeader(context, 'Best', 'Best'),
-      _horizontalList(context, 'Best'),
-      const SliverToBoxAdapter(
-          child: Padding(
-              padding: EdgeInsets.symmetric(vertical: 8),
-              child: Center(child: SmartBannerAdWidget()))),
-      ...MockData.categories.map((cat) => _categoryRow(context, cat)),
-      const SliverToBoxAdapter(child: SizedBox(height: 100)),
-    ]);
+          const SliverToBoxAdapter(child: _TopAutoSlider169()),
+          const SliverToBoxAdapter(
+              child: Padding(
+                  padding: EdgeInsets.symmetric(vertical: 8),
+                  child: Center(child: SmartBannerAdWidget()))),
+          _sectionHeader(context, 'New', 'New'),
+          _horizontalList(context, 'New'),
+          _sectionHeader(context, 'Sport', 'Sport'),
+          _horizontalList(context, 'Sport'),
+          _sectionHeader(context, 'Anime', 'Anime'),
+          _horizontalList(context, 'Anime'),
+          _sectionHeader(context, 'Cars', 'Cars'),
+          _horizontalList(context, 'Cars'),
+          _sectionHeader(context, 'Nature', 'Nature'),
+          _horizontalList(context, 'Nature'),
+          _sectionHeader(context, 'Space', 'Space'),
+          _horizontalList(context, 'Space'),
+          _sectionHeader(context, '16:9', '16:9'),
+          _horizontalList(context, '16:9'),
+          _sectionHeader(context, 'Best', 'Best'),
+          _horizontalList(context, 'Best'),
+          const SliverToBoxAdapter(
+              child: Padding(
+                  padding: EdgeInsets.symmetric(vertical: 8),
+                  child: Center(child: SmartBannerAdWidget()))),
+          ...MockData.categories.map((cat) => _categoryRow(context, cat)),
+          const SliverToBoxAdapter(child: SizedBox(height: 100)),
+        ]);
   }
 
   SliverToBoxAdapter _sectionHeader(
@@ -3438,7 +3537,7 @@ class HomeScreen extends StatelessWidget {
                     if (snapshot.hasData && snapshot.data!.isNotEmpty)
                       NetImage(
                           url: snapshot.data![0].thumbnailUrl,
-                          fallbackUrl: snapshot.data![0].fallbackUrl,
+                          fallbackUrl: snapshot.data![0].displayFallbackUrl,
                           memWidth: 300),
                     Container(
                         decoration: BoxDecoration(
@@ -3689,7 +3788,7 @@ class _TopAutoSlider169State extends State<_TopAutoSlider169> {
                           tag: 'slider_${wallpaper.id}_$index',
                           child: NetImage(
                             url: wallpaper.thumbnailUrl,
-                            fallbackUrl: wallpaper.fallbackUrl,
+                            fallbackUrl: wallpaper.displayFallbackUrl,
                             memWidth: 640,
                           ),
                         ),
@@ -4439,7 +4538,7 @@ class _FavGridCard extends StatelessWidget {
               tag: 'fav_${wallpaper.id}',
               child: NetImage(
                 url: wallpaper.thumbnailUrl,
-                fallbackUrl: wallpaper.fallbackUrl,
+                fallbackUrl: wallpaper.displayFallbackUrl,
                 memWidth: 400,
               ),
             ),
@@ -4549,7 +4648,7 @@ class _FavListRow extends StatelessWidget {
               height: 78,
               child: NetImage(
                 url: wallpaper.thumbnailUrl,
-                fallbackUrl: wallpaper.fallbackUrl,
+                fallbackUrl: wallpaper.displayFallbackUrl,
                 memWidth: 220,
               ),
             ),
@@ -4650,7 +4749,7 @@ class CatalogScreen extends StatelessWidget {
                       firstUrl != null
                           ? NetImage(
                               url: firstUrl,
-                              fallbackUrl: snapshot.data![0].fallbackUrl,
+                              fallbackUrl: snapshot.data![0].displayFallbackUrl,
                               memWidth: 400)
                           : Container(
                               color: Colors.grey[850],
@@ -5132,8 +5231,8 @@ class _NavItem extends StatelessWidget {
 // 16. MAIN LAYOUT
 // -----------------------------------------------------------------------------
 // ✅ AnimatedSwitcher كان يهدم الشاشة بالكامل عند كل تبديل تبويب (فقدان موضع
-// التمرير + إعادة كل الطلبات). الآن IndexedStack «كسول»: يبني التبويب عند أول
-// زيارة فقط ثم يبقيه حياً — تنقل فوري بلا إعادة تحميل.
+// التمرير + إعادة كل الطلبات). الآن يُبنى التبويب المعروض وحده: التنقل فوري
+// لأن القوائم مخزّنة، والذاكرة لا تحمل صور خمسة تبويبات في وقت واحد.
 // =============================================================================
 class MainLayout extends StatefulWidget {
   const MainLayout({super.key});
@@ -5142,8 +5241,6 @@ class MainLayout extends StatefulWidget {
 }
 
 class _MainLayoutState extends State<MainLayout> {
-  final Set<int> _visited = {0};
-
   @override
   void initState() {
     super.initState();
@@ -5190,7 +5287,6 @@ class _MainLayoutState extends State<MainLayout> {
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<AppProvider>();
-    _visited.add(provider.currentIndex);
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -5208,13 +5304,13 @@ class _MainLayoutState extends State<MainLayout> {
               Color(0xFF1A1A2E)
             ])))),
         Positioned.fill(
-          child: IndexedStack(
-            index: provider.currentIndex,
-            children: List.generate(
-              5,
-              (i) =>
-                  _visited.contains(i) ? _screenAt(i) : const SizedBox.shrink(),
-            ),
+          // ✅ التبويب المعروض فقط يبقى في الذاكرة. كان IndexedStack يُبقي
+          // التبويبات الخمسة حيّة بكل صورها معاً — خمسة أضعاف الاستهلاك بلا
+          // فائدة. التبديل يبقى فورياً لأن قوائم الصور مخزّنة (futureOf) فلا
+          // يحدث أي طلب شبكة عند العودة، وPageStorageKey يحفظ موضع التمرير.
+          child: KeyedSubtree(
+            key: ValueKey<int>(provider.currentIndex),
+            child: _screenAt(provider.currentIndex),
           ),
         ),
         const Positioned(
@@ -5262,8 +5358,8 @@ void main() async {
 
   // ✅ حدّ كاش الصور: الافتراضي 100 ميجابايت، وهو سبب رئيسي لقتل iOS للتطبيق
   // (jetsam) عند التمرير في أقسام فيها صور 4K. 60 ميجابايت كافية تماماً.
-  PaintingBinding.instance.imageCache.maximumSizeBytes = 60 << 20;
-  PaintingBinding.instance.imageCache.maximumSize = 100;
+  PaintingBinding.instance.imageCache.maximumSizeBytes = 45 << 20;
+  PaintingBinding.instance.imageCache.maximumSize = 80;
 
   FlutterError.onError = (FlutterErrorDetails details) {
     FlutterError.presentError(details);
