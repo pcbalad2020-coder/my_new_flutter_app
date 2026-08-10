@@ -589,11 +589,7 @@ class _UploadTabState extends State<_UploadTab> {
           ),
         ],
         const SizedBox(height: 16),
-        const _HintBox(
-          text: 'الاسم يُختار تلقائياً (الرقم التالي بعد أكبر رقم موجود). '
-              'بعد الرفع يُمسح الكاش فوراً، واضغط زر العرض لإعادة بناء '
-              'الواجهة فتظهر الصورة مباشرة بلا إعادة تشغيل.',
-        ),
+        const _HintBox(text: 'مرحبا بك في لوحة التحكم الخاصة بك على المشرف.\n'),
       ],
     );
   }
@@ -764,10 +760,8 @@ class _NotifyTabState extends State<_NotifyTab> {
         ],
         const SizedBox(height: 16),
         const _HintBox(
-          text: 'التطبيق لا يرسل الإشعار بنفسه: يطلق حدثاً في مستودع '
-              '${AdminConfig.controlRepo} وGitHub Action هو من يرسله بمفتاح '
-              'Firebase المحفوظ في أسرار GitHub. لن يظهر الإشعار على جهازك أنت '
-              'إذا كان التطبيق مفتوحاً في المقدمة أحياناً — جرّب بإغلاقه.',
+          text: 'الاشعارات'
+              '${AdminConfig.controlRepo}',
         ),
       ],
     );
