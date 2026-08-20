@@ -826,6 +826,64 @@ class WallpaperModel {
   String get displayFallbackUrl => thumbUrl.isNotEmpty ? imageUrl : fallbackUrl;
 }
 
+// =============================================================================
+// 📢 PROMO — شريط إعلاني خاص يتحكم به المالك من مستودع KM2MY
+// -----------------------------------------------------------------------------
+// لا يظهر في التطبيق إطلاقاً إلا إذا وُجد ملف promo.json في المستودع وكان
+// active=true ولم ينتهِ وقته. أي خطأ أو غياب للملف = لا يظهر شيء (صامت تماماً).
+//
+// شكل الملف (كل الحقول اختيارية عدا active):
+// {
+//   "active": true,
+//   "image": "banner.jpg",          اسم صورة داخل نفس المستودع (أو رابط كامل)
+//   "title": "عرض خاص",
+//   "body": "خصم 50٪ لفترة محدودة",
+//   "link": "https://example.com",  يُفتح عند الضغط (اختياري)
+//   "startAt": "2026-08-10T00:00:00Z",   قبله لا يظهر (اختياري)
+//   "endAt": "2026-08-11T00:00:00Z"      بعده يختفي تلقائياً (اختياري)
+// }
+// =============================================================================
+class PromoModel {
+  final bool active;
+  final String imageUrl;
+  final String title;
+  final String body;
+  final String link;
+  final DateTime? startAt;
+  final DateTime? endAt;
+
+  /// ✅ نسبة أبعاد الصورة كما رفعها المالك. عند 0 يُقاس ارتفاع الشريط من
+  /// الصورة نفسها تلقائياً بدل فرض 16:7 وقصّ أطرافها.
+  final double aspectRatio;
+
+  const PromoModel({
+    required this.active,
+    this.imageUrl = '',
+    this.title = '',
+    this.body = '',
+    this.link = '',
+    this.startAt,
+    this.endAt,
+    this.aspectRatio = 0,
+  });
+
+  /// هل يجب عرضه الآن؟ يفحص التفعيل والوقت ووجود محتوى فعلي
+  bool get isVisibleNow {
+    if (!active) return false;
+    if (imageUrl.isEmpty && title.isEmpty && body.isEmpty) return false;
+    final now = DateTime.now().toUtc();
+    if (startAt != null && now.isBefore(startAt!)) return false;
+    if (endAt != null && now.isAfter(endAt!)) return false;
+    return true;
+  }
+
+  bool get hasImage => imageUrl.isNotEmpty;
+  bool get hasText => title.isNotEmpty || body.isNotEmpty;
+}
+
+/// اسم مستودع الإعلان — تستخدمه لوحة التحكم أيضاً
+const String kPromoRepo = 'KM2MY';
+
 class CategoryModel {
   final String name;
   final String repository;
@@ -1438,7 +1496,90 @@ class GitHubService {
     return future;
   }
 
+  // ── 📢 الإعلان الخاص (KM2MY) ───────────────────────────────────────────
+  static const String _promoRepo = kPromoRepo;
+
+  /// مدة قصيرة عمداً: الإعلان مؤقت بطبيعته فيجب أن يظهر ويختفي بسرعة
+  static const Duration _promoCacheDuration = Duration(minutes: 15);
+
+  static PromoModel? _promoCache;
+  static DateTime? _promoCachedAt;
+  static Future<PromoModel?>? _promoInFlight;
+
+  /// يجلب promo.json من مستودع KM2MY. أي فشل أو غياب = null = لا يظهر شيء.
+  static Future<PromoModel?> fetchPromo() {
+    final cachedAt = _promoCachedAt;
+    if (cachedAt != null &&
+        DateTime.now().difference(cachedAt) < _promoCacheDuration) {
+      return Future.value(_promoCache);
+    }
+    return _promoInFlight ??= _loadPromo().whenComplete(() {
+      _promoInFlight = null;
+    });
+  }
+
+  static Future<PromoModel?> _loadPromo() async {
+    try {
+      final res = await _rawDio.get(
+        _toRawGithub(
+            owner: _owner,
+            repo: _promoRepo,
+            branch: _branch,
+            path: 'promo.json'),
+        options: Options(responseType: ResponseType.plain),
+      );
+      if (res.statusCode != 200 || res.data == null) {
+        return _cachePromo(null);
+      }
+
+      final data = jsonDecode(res.data.toString());
+      if (data is! Map) return _cachePromo(null);
+
+      String image = (data['image'] as String? ?? '').trim();
+      // اسم ملف مجرد → يُبنى رابطه من نفس المستودع
+      if (image.isNotEmpty && !image.startsWith('http')) {
+        image = _toRawGithub(
+            owner: _owner,
+            repo: _promoRepo,
+            branch: _branch,
+            path: image.startsWith('/') ? image.substring(1) : image);
+      }
+
+      final promo = PromoModel(
+        active: data['active'] == true,
+        imageUrl: image,
+        title: (data['title'] as String? ?? '').trim(),
+        body: (data['body'] as String? ?? '').trim(),
+        link: (data['link'] as String? ?? '').trim(),
+        startAt: DateTime.tryParse(data['startAt'] as String? ?? '')?.toUtc(),
+        endAt: DateTime.tryParse(data['endAt'] as String? ?? '')?.toUtc(),
+        aspectRatio: (data['aspectRatio'] as num?)?.toDouble() ?? 0,
+      );
+
+      AppLogger.info(promo.isVisibleNow
+          ? '📢 Promo active: ${promo.title}'
+          : '📢 Promo found but not visible now');
+      return _cachePromo(promo);
+    } catch (e) {
+      // 404 هو الحالة الطبيعية حين لا يوجد إعلان — لا نسجّله كخطأ مزعج
+      AppLogger.info('📢 No promo available');
+      return _cachePromo(null);
+    }
+  }
+
+  static PromoModel? _cachePromo(PromoModel? promo) {
+    _promoCache = promo;
+    _promoCachedAt = DateTime.now();
+    return promo;
+  }
+
+  static void clearPromoCache() {
+    _promoCache = null;
+    _promoCachedAt = null;
+  }
+
   static void clearCache() {
+    clearPromoCache();
     _cache.clear();
     _cacheTimestamps.clear();
     _fileCache.clear();
@@ -3372,6 +3513,8 @@ class HomeScreen extends StatelessWidget {
                           builder: (_) => const SettingsScreen()))),
             ],
           ),
+          // 📢 الإعلان الخاص فوق السلايدر — لا يشغل أي مساحة إن لم يوجد
+          const SliverToBoxAdapter(child: _PromoBanner()),
           const SliverToBoxAdapter(child: _TopAutoSlider169()),
           const SliverToBoxAdapter(
               child: Padding(
@@ -3581,6 +3724,238 @@ class HomeScreen extends StatelessWidget {
             },
           ),
         ),
+      ),
+    );
+  }
+}
+
+// =============================================================================
+// 11.0 📢 PROMO BANNER — شريط الإعلان الخاص (فوق السلايدر)
+// -----------------------------------------------------------------------------
+// يشغل صفراً من المساحة إذا لم يوجد إعلان: SizedBox.shrink() لا يرسم شيئاً ولا
+// يحجز ارتفاعاً، فالواجهة تبقى كما هي تماماً حتى يرفع المالك promo.json.
+// =============================================================================
+class _PromoBanner extends StatefulWidget {
+  const _PromoBanner();
+
+  @override
+  State<_PromoBanner> createState() => _PromoBannerState();
+}
+
+class _PromoBannerState extends State<_PromoBanner> {
+  PromoModel? _promo;
+  bool _dismissed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final promo = await GitHubService.fetchPromo();
+    if (!mounted) return;
+    setState(() => _promo = promo);
+  }
+
+  Future<void> _openLink(String url) async {
+    // نفتح الرابط عبر المشاركة بدل إضافة حزمة url_launcher جديدة
+    await SharePlus.instance.share(ShareParams(text: url));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final promo = _promo;
+    if (_dismissed || promo == null || !promo.isVisibleNow) {
+      return const SizedBox.shrink();
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      child: GestureDetector(
+        onTap: promo.link.isEmpty ? null : () => _openLink(promo.link),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(20),
+          child: Stack(children: [
+            if (promo.hasImage)
+              // ✅ الارتفاع يتبع الصورة نفسها: إن ذكر المالك aspectRatio
+              // نستخدمه فوراً (بلا قفزة في التخطيط)، وإلا نقيسه من الصورة
+              // بعد تحميلها. لا قصّ ولا فراغ مهما كان مقاس الصورة المرفوعة.
+              _PromoImage(promo: promo)
+            else
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    begin: Alignment.topRight,
+                    end: Alignment.bottomLeft,
+                    colors: [Color(0xFF1565C0), Color(0xFF7B1FA2)],
+                  ),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: _textBlock(promo, onImage: false),
+              ),
+
+            // النص فوق الصورة إن وُجد الاثنان معاً
+            if (promo.hasImage && promo.hasText)
+              Positioned.fill(
+                child: DecoratedBox(
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      stops: [0.35, 1.0],
+                      colors: [Colors.transparent, Color(0xD9000000)],
+                    ),
+                  ),
+                  child: Align(
+                    alignment: Alignment.bottomRight,
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: _textBlock(promo, onImage: true),
+                    ),
+                  ),
+                ),
+              ),
+
+            // زر إخفاء — احترام لخيار المستخدم داخل الجلسة الحالية
+            Positioned(
+              top: 6,
+              left: 6,
+              child: GestureDetector(
+                onTap: () => setState(() => _dismissed = true),
+                behavior: HitTestBehavior.opaque,
+                child: Container(
+                  padding: const EdgeInsets.all(5),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.black.withValues(alpha: 0.45),
+                  ),
+                  child: const Icon(Icons.close, color: Colors.white, size: 15),
+                ),
+              ),
+            ),
+
+            if (promo.link.isNotEmpty)
+              Positioned(
+                bottom: 8,
+                left: 10,
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.18),
+                    borderRadius: BorderRadius.circular(20),
+                    border:
+                        Border.all(color: Colors.white.withValues(alpha: 0.35)),
+                  ),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    const Icon(Icons.open_in_new,
+                        color: Colors.white, size: 12),
+                    const SizedBox(width: 5),
+                    Text('اضغط للفتح',
+                        style: AppFonts.poppins(
+                            color: Colors.white, fontSize: 10.5)),
+                  ]),
+                ),
+              ),
+          ]),
+        ),
+      ),
+    );
+  }
+
+  Widget _textBlock(PromoModel promo, {required bool onImage}) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (promo.title.isNotEmpty)
+          Text(promo.title,
+              style: AppFonts.poppins(
+                  color: Colors.white,
+                  fontSize: onImage ? 16 : 17,
+                  fontWeight: FontWeight.bold,
+                  shadows: onImage
+                      ? const [Shadow(blurRadius: 6, color: Colors.black87)]
+                      : null),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis),
+        if (promo.body.isNotEmpty) ...[
+          const SizedBox(height: 4),
+          Text(promo.body,
+              style: AppFonts.poppins(
+                  color: Colors.white.withValues(alpha: 0.9),
+                  fontSize: 12.5,
+                  height: 1.5,
+                  shadows: onImage
+                      ? const [Shadow(blurRadius: 6, color: Colors.black87)]
+                      : null),
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis),
+        ],
+      ],
+    );
+  }
+}
+
+/// ✅ صورة الإعلان بارتفاع يطابق مقاسها الفعلي.
+/// المصدر الأول: قيمة aspectRatio التي تكتبها لوحة التحكم عند الرفع (فورية).
+/// المصدر الثاني: قياس الصورة نفسها بعد تحميلها (لو رُفع الملف يدوياً).
+/// ريثما تُقاس نعرض 16:7 مؤقتاً حتى لا تقفز الواجهة.
+class _PromoImage extends StatefulWidget {
+  final PromoModel promo;
+  const _PromoImage({required this.promo});
+
+  @override
+  State<_PromoImage> createState() => _PromoImageState();
+}
+
+class _PromoImageState extends State<_PromoImage> {
+  static const double _fallbackRatio = 16 / 7;
+  double? _measured;
+  ImageStreamListener? _listener;
+  ImageStream? _stream;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.promo.aspectRatio <= 0) _measure();
+  }
+
+  void _measure() {
+    final provider = CachedNetworkImageProvider(widget.promo.imageUrl);
+    _stream = provider.resolve(ImageConfiguration.empty);
+    _listener = ImageStreamListener((info, _) {
+      if (!mounted) return;
+      final w = info.image.width, h = info.image.height;
+      if (h > 0) setState(() => _measured = w / h);
+    }, onError: (_, __) {});
+    _stream!.addListener(_listener!);
+  }
+
+  @override
+  void dispose() {
+    if (_stream != null && _listener != null) {
+      _stream!.removeListener(_listener!);
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final declared = widget.promo.aspectRatio;
+    final ratio = declared > 0 ? declared : (_measured ?? _fallbackRatio);
+    // حدود منطقية: نمنع شريطاً أطول من الشاشة أو أنحف من خيط
+    final safeRatio = ratio.clamp(0.6, 4.0);
+
+    return AspectRatio(
+      aspectRatio: safeRatio,
+      child: NetImage(
+        url: widget.promo.imageUrl,
+        memWidth: 900,
+        fit: BoxFit.cover,
       ),
     );
   }
@@ -5009,7 +5384,7 @@ class SettingsScreen extends StatelessWidget {
                                         color: Colors.white, size: 40))))),
                     const SizedBox(height: 16),
                     _SecretAdminGate(
-                      child: Text('الإصدار 1.1.0',
+                      child: Text('الإصدار 1.0.1',
                           style: AppFonts.poppins(
                               color: Colors.grey[400], fontSize: 13)),
                     ),
@@ -5018,7 +5393,7 @@ class SettingsScreen extends StatelessWidget {
                         style: AppFonts.poppins(
                             color: Colors.white70, fontSize: 13)),
                     const SizedBox(height: 4),
-                    Text('KASEM 2026',
+                    Text('Developed by KASEM',
                         style: AppFonts.poppins(
                             color: Colors.grey[500], fontSize: 12))
                   ]),
