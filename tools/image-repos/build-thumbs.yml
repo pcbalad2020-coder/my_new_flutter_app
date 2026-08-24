@@ -1,0 +1,128 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# مرجع فقط — هذا الملف لا يعمل من هذا المستودع (تطبيق فلاتر، لا صور فيه).
+# انسخه إلى كل مستودع صور تابع لـ AdminConfig.owner في lib/admin_panel.dart
+# (All-images, sport, anime_wallpapers, cars, nature, space, imag-16-9)
+# بالمسار: .github/workflows/build-thumbs.yml
+# (واحذف update-files.yml من نفس المستودع إن وُجد، فهذا يقوم بعمله وأكثر)
+# ───────────────────────────────────────────────────────────────────────────
+# توليد المصغّرات + تحديث files.json تلقائياً
+#
+# ماذا يفعل: عند رفع أي صورة جديدة يولّد نسخة webp بعرض 480 بكسل داخل مجلد
+# thumbs/ ثم يكتب files.json. النتيجة أن التطبيق يحمّل ~35 كيلوبايت بدل
+# 3 ميجابايت لكل صورة في الشبكات — أي أسرع بعشرات المرات وبذاكرة أقل بكثير.
+#
+# ✅ إزالة تكرار الاسم: لو وُجد أكثر من ملف بنفس الرقم/الاسم بامتدادات
+# مختلفة (مثلاً 1.jpg و1.png في نفس المستودع — حالة شاذة لا يُفترض حدوثها
+# عبر لوحة الإدارة لكنها ممكنة برفع يدوي من GitHub) نُبقي أول ملف فقط في
+# files.json ونطبع تحذيراً بالباقي بدل تضمينه، لأن هذا هو نمط عطل "نفس
+# الصورة تظهر مرتين باسمين مختلفين" الذي رُصد في التطبيق.
+#
+# ⚠️ تفعيل صلاحية الكتابة مرة واحدة لكل مستودع:
+#     Settings ← Actions ← General ← Workflow permissions
+#     ← Read and write permissions ← Save
+# ═══════════════════════════════════════════════════════════════════════════
+
+name: Build thumbs
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'files.json'
+      - 'thumbs/**'
+      - '.github/**'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-thumbs-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install ImageMagick + webp
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq imagemagick webp
+
+      - name: Generate thumbnails and files.json
+        run: |
+          python3 - << 'EOF'
+          import json, os, subprocess
+
+          EXTS = ('.jpg', '.jpeg', '.png', '.webp')
+          THUMB_DIR = 'thumbs'
+          WIDTH = 480       # عرض المصغّر بالبكسل
+          QUALITY = 72      # جودة webp
+
+          os.makedirs(THUMB_DIR, exist_ok=True)
+          candidates = []
+
+          for root, dirs, names in os.walk('.'):
+              dirs[:] = [d for d in dirs if d not in ('.git', '.github', THUMB_DIR)]
+              for name in names:
+                  if not name.lower().endswith(EXTS):
+                      continue
+                  path = os.path.relpath(os.path.join(root, name), '.').replace(os.sep, '/')
+                  candidates.append(path)
+
+          def sort_key(p):
+              stem = os.path.splitext(os.path.basename(p))[0]
+              return (0, int(stem)) if stem.isdigit() else (1, stem.lower())
+
+          candidates.sort(key=sort_key)
+
+          # ✅ إزالة التكرار حسب الاسم بعد حذف الامتداد وتصغير الأحرف —
+          # نفس المنطق المستخدم في التطبيق (GitHubService.getWallpapers)
+          # كي لا تُكتب صورتان بنفس الرقم/الاسم في files.json.
+          files = []
+          seen = {}
+          for path in candidates:
+              stem = os.path.splitext(os.path.basename(path))[0].lower()
+              if stem in seen:
+                  print(f'⚠️ اسم مكرر تم تجاهله: {path} (موجود مسبقاً: {seen[stem]})')
+                  continue
+              seen[stem] = path
+              files.append(path)
+
+          made = skipped = failed = 0
+          for path in files:
+              thumb = f'{THUMB_DIR}/{os.path.basename(path)}.webp'
+              # نتخطى المصغّر الموجود والأحدث من أصله
+              if os.path.exists(thumb) and os.path.getmtime(thumb) >= os.path.getmtime(path):
+                  skipped += 1
+                  continue
+              try:
+                  subprocess.run(
+                      ['convert', path, '-auto-orient', '-strip',
+                       '-resize', f'{WIDTH}x>', '-quality', str(QUALITY), thumb],
+                      check=True, capture_output=True)
+                  made += 1
+              except subprocess.CalledProcessError as e:
+                  print(f'⚠️ فشل توليد مصغّر {path}: {e.stderr.decode()[:120]}')
+                  failed += 1
+
+          # thumbs: true تخبر التطبيق أن مجلد المصغّرات جاهز فيستخدمه
+          manifest = {'thumbs': failed == 0 and len(files) > 0, 'files': files}
+          with open('files.json', 'w', encoding='utf-8') as f:
+              json.dump(manifest, f, ensure_ascii=False, indent=0)
+
+          print(f'✅ {len(files)} صورة | مصغّرات جديدة: {made} | موجودة: {skipped} | فشل: {failed} | أسماء متجاهلة: {len(candidates) - len(files)}')
+          EOF
+
+      - name: Commit
+        run: |
+          git add -A files.json thumbs
+          if git diff --cached --quiet; then
+            echo "لا تغيير"
+            exit 0
+          fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "chore: rebuild thumbs and files.json [skip ci]"
+          git push

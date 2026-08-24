@@ -1064,6 +1064,16 @@ class GitHubService {
         '&w=$width&output=webp&q=72&we&maxage=1y';
   }
 
+  /// ✅ يستبعد أي مسار داخل مجلد thumbs/ من قوائم الصور. القوائم المتداخلة
+  /// (files.json، jsDelivr flat، git trees) تُرجع كل الملفات بما فيها
+  /// المصغّرات، فكانت "1.jpg" و"thumbs/1.jpg.webp" تُعاملان كصورتين
+  /// منفصلتين → نفس الصورة تظهر مرتين بعنوانين مختلفين ("1" و"1.jpg").
+  static bool _isThumbPath(String lowerPath) {
+    return lowerPath == 'thumbs' ||
+        lowerPath.startsWith('thumbs/') ||
+        lowerPath.contains('/thumbs/');
+  }
+
   /// عميل مخصص لجلب ملف القائمة الثابت من raw.githubusercontent
   static final Dio _rawDio = Dio(BaseOptions(
     connectTimeout: const Duration(seconds: 12),
@@ -1098,6 +1108,7 @@ class GitHubService {
 
     return rawList.map((e) => e.toString()).where((path) {
       final lower = path.toLowerCase();
+      if (_isThumbPath(lower)) return false;
       return lower.endsWith('.jpg') ||
           lower.endsWith('.jpeg') ||
           lower.endsWith('.png') ||
@@ -1132,6 +1143,7 @@ class GitHubService {
       final files = response.data['files'] as List? ?? [];
       return files.where((f) {
         final name = (f['name'] as String).toLowerCase();
+        if (_isThumbPath(name)) return false;
         return name.endsWith('.jpg') ||
             name.endsWith('.jpeg') ||
             name.endsWith('.png') ||
@@ -1174,6 +1186,7 @@ class GitHubService {
       final files = response.data['files'] as List? ?? [];
       return files.where((f) {
         final name = (f['name'] as String? ?? '').toLowerCase();
+        if (_isThumbPath(name)) return false;
         return name.endsWith('.jpg') ||
             name.endsWith('.jpeg') ||
             name.endsWith('.png') ||
@@ -1213,6 +1226,7 @@ class GitHubService {
       final tree = response.data['tree'] as List? ?? [];
       return tree.where((f) {
         final path = (f['path'] as String).toLowerCase();
+        if (_isThumbPath(path)) return false;
         return f['type'] == 'blob' &&
             (path.endsWith('.jpg') ||
                 path.endsWith('.jpeg') ||
@@ -1437,7 +1451,21 @@ class GitHubService {
     final repoName = resolveRepositoryName(categoryName);
     if (repoName.isEmpty) return [];
 
-    final files = await _getFilesWithFallback(repoName);
+    final rawFiles = await _getFilesWithFallback(repoName);
+    // ✅ إزالة التكرار: نفس الصورة قد تظهر مرتين باسمين مختلفين (مثلاً
+    // "1" و"1.jpg") إذا اختلّت files.json عن محتوى المستودع الفعلي.
+    // نوحّد المفتاح بحذف الامتداد وتصغير الأحرف ونُبقي أول ظهور فقط.
+    final seenNames = <String>{};
+    final files = rawFiles.where((file) {
+      final name = file['name'] as String? ?? 'unnamed';
+      final normalized = name
+          .split('/')
+          .last
+          .trim()
+          .replaceAll(RegExp(r'\.(jpe?g|png|webp)$', caseSensitive: false), '')
+          .toLowerCase();
+      return seenNames.add(normalized);
+    }).toList();
     final is169 = categoryName == '16:9' || categoryName == '16:9 Ratio';
     final wallpapers = files.map((file) {
       final name = file['name'] as String? ?? 'unnamed';
