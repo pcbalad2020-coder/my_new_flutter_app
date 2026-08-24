@@ -13,8 +13,8 @@ class AdminConfig {
   static const String owner = 'pcbalad2020-coder';
   static const String branch = 'main';
 
-  /// المستودع الذي يحتوي workflow إرسال الإشعارات
-  static const String controlRepo = 'km2-config';
+  /// المستودع الذي يحتوي workflow إرسال الإشعارات وملف التذكير اليومي
+  static const String controlRepo = kNotifyConfigRepo;
 
   /// الأقسام المتاحة للرفع: الاسم المعروض ← اسم المستودع
   static const Map<String, String> repos = {
@@ -403,6 +403,64 @@ class AdminService {
       return AdminResult(false, 'فشل الإرسال (${res.statusCode}) $msg');
     } catch (e) {
       return AdminResult(false, 'خطأ أثناء الإرسال: $e');
+    }
+  }
+
+  // ── ⏰ التذكير اليومي (km2-config) ───────────────────────────────────────
+
+  /// قراءة daily_reminder.json الحالي مع sha اللازم للتحديث (null إن لم يوجد)
+  static Future<Map<String, dynamic>?> readDailyReminder(String token) async {
+    try {
+      final res = await _dio(token).get(
+        '/repos/${AdminConfig.owner}/$kNotifyConfigRepo/contents/daily_reminder.json',
+        queryParameters: {'ref': AdminConfig.branch},
+      );
+      if (res.statusCode != 200 || res.data is! Map) return null;
+      final sha = res.data['sha'] as String?;
+      final encoded =
+          (res.data['content'] as String? ?? '').replaceAll('\n', '');
+      if (sha == null) return null;
+      final decoded = jsonDecode(utf8.decode(base64Decode(encoded)));
+      if (decoded is! Map) return null;
+      return {'sha': sha, 'data': Map<String, dynamic>.from(decoded)};
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /// يكتب daily_reminder.json — يُنشئه إن لم يكن موجوداً، أو يحدّثه إن وُجد
+  static Future<AdminResult> publishDailyReminder({
+    required String token,
+    required DailyReminderModel config,
+  }) async {
+    try {
+      final existing = await readDailyReminder(token);
+      final res = await _dio(token).put(
+        '/repos/${AdminConfig.owner}/$kNotifyConfigRepo/contents/daily_reminder.json',
+        data: {
+          'message': existing == null
+              ? 'create daily_reminder.json via admin panel'
+              : 'update daily_reminder.json via admin panel',
+          'content': base64Encode(utf8.encode(
+              const JsonEncoder.withIndent('  ').convert(config.toJson()))),
+          if (existing != null) 'sha': existing['sha'],
+          'branch': AdminConfig.branch,
+        },
+      );
+
+      if (res.statusCode != 200 && res.statusCode != 201) {
+        final msg = res.data is Map ? res.data['message'] : '';
+        return AdminResult(false, 'فشل حفظ التذكير اليومي (${res.statusCode}) $msg');
+      }
+
+      GitHubService.clearDailyReminderCache();
+      return AdminResult(
+          true,
+          config.enabled
+              ? 'حُفظ التذكير اليومي ✅ — سيصل للمستخدمين خلال يوم أو يومين'
+              : 'عُطّل التذكير اليومي ✅ — لن يُرسل بعد الآن');
+    } catch (e) {
+      return AdminResult(false, 'خطأ أثناء حفظ التذكير اليومي: $e');
     }
   }
 }
@@ -1284,11 +1342,224 @@ class _NotifyTabState extends State<_NotifyTab> {
           const SizedBox(height: 16),
           _StatusBox(ok: _statusOk, message: _status!),
         ],
+        const Divider(height: 40, color: Colors.white24),
+        _DailyReminderCard(token: widget.token),
         const SizedBox(height: 16),
         const _HintBox(
             text:
                 '                       -----------------  KASEM  ------------------- '),
       ],
+    );
+  }
+}
+
+// ── التذكير اليومي التلقائي (12 ظهراً و10 مساءً) ────────────────────────────
+// إشعار محلي يُجدوَل داخل كل جهاز فور فتح التطبيق (main.dart)، مستقل تماماً
+// عن إشعار الإرسال اليدوي أعلاه. هذا القسم يتحكم فقط بنصّه وتفعيله عبر ملف
+// daily_reminder.json في مستودع km2-config — يقرؤه كل جهاز عند إقلاعه.
+class _DailyReminderCard extends StatefulWidget {
+  final String? token;
+  const _DailyReminderCard({required this.token});
+
+  @override
+  State<_DailyReminderCard> createState() => _DailyReminderCardState();
+}
+
+class _DailyReminderCardState extends State<_DailyReminderCard> {
+  final TextEditingController _noonTitleCtrl = TextEditingController();
+  final TextEditingController _noonBodyCtrl = TextEditingController();
+  final TextEditingController _nightTitleCtrl = TextEditingController();
+  final TextEditingController _nightBodyCtrl = TextEditingController();
+  bool _enabled = true;
+  bool _loading = true;
+  bool _busy = false;
+  String? _status;
+  bool _statusOk = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCurrent();
+  }
+
+  @override
+  void dispose() {
+    _noonTitleCtrl.dispose();
+    _noonBodyCtrl.dispose();
+    _nightTitleCtrl.dispose();
+    _nightBodyCtrl.dispose();
+    super.dispose();
+  }
+
+  void _fill(DailyReminderModel config) {
+    _enabled = config.enabled;
+    _noonTitleCtrl.text = config.noonTitle;
+    _noonBodyCtrl.text = config.noonBody;
+    _nightTitleCtrl.text = config.nightTitle;
+    _nightBodyCtrl.text = config.nightBody;
+  }
+
+  Future<void> _loadCurrent() async {
+    final token = widget.token;
+    if (token == null) {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _fill(DailyReminderModel.defaults);
+        });
+      }
+      return;
+    }
+    final current = await AdminService.readDailyReminder(token);
+    if (!mounted) return;
+    setState(() {
+      _loading = false;
+      final data = current?['data'] as Map<String, dynamic>?;
+      _fill(data == null
+          ? DailyReminderModel.defaults
+          : DailyReminderModel.fromJson(data));
+    });
+  }
+
+  Future<void> _save() async {
+    final token = widget.token;
+    if (token == null) {
+      setState(() {
+        _statusOk = false;
+        _status = 'أدخل مفتاح GitHub أولاً من تبويب «المفتاح»';
+      });
+      return;
+    }
+    if (_noonTitleCtrl.text.trim().isEmpty ||
+        _noonBodyCtrl.text.trim().isEmpty ||
+        _nightTitleCtrl.text.trim().isEmpty ||
+        _nightBodyCtrl.text.trim().isEmpty) {
+      setState(() {
+        _statusOk = false;
+        _status = 'كل الحقول الأربعة مطلوبة';
+      });
+      return;
+    }
+
+    setState(() {
+      _busy = true;
+      _status = null;
+    });
+
+    final result = await AdminService.publishDailyReminder(
+      token: token,
+      config: DailyReminderModel(
+        enabled: _enabled,
+        noonTitle: _noonTitleCtrl.text.trim(),
+        noonBody: _noonBodyCtrl.text.trim(),
+        nightTitle: _nightTitleCtrl.text.trim(),
+        nightBody: _nightBodyCtrl.text.trim(),
+      ),
+    );
+
+    if (!mounted) return;
+    setState(() {
+      _busy = false;
+      _statusOk = result.ok;
+      _status = result.message;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) {
+      return const Center(
+          child: Padding(
+              padding: EdgeInsets.all(24),
+              child: CircularProgressIndicator()));
+    }
+    return _AdminPanelBox(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.alarm_outlined, color: Colors.blueAccent),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text('التذكير اليومي التلقائي (12 ظهراً و10 مساءً)',
+                    style: TextStyle(
+                        color: Colors.white, fontWeight: FontWeight.bold)),
+              ),
+              Switch(
+                value: _enabled,
+                onChanged: (v) => setState(() => _enabled = v),
+                activeThumbColor: Colors.blueAccent,
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+              'يُرسل تلقائياً من كل جهاز (بلا حاجة لضغط زر) بتوقيت المستخدم '
+              'المحلي — يعمل على أندرويد وآيفون معاً، ومستقل عن الإشعار '
+              'اليدوي أعلاه.',
+              style: TextStyle(color: Colors.grey[400], fontSize: 12)),
+          const SizedBox(height: 16),
+          const Text('☀️ إشعار الظهر', style: TextStyle(color: Colors.blueAccent)),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _noonTitleCtrl,
+            maxLength: 60,
+            style: const TextStyle(color: Colors.white),
+            decoration: const InputDecoration(
+                border: OutlineInputBorder(), labelText: 'عنوان إشعار الظهر'),
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _noonBodyCtrl,
+            maxLines: 2,
+            maxLength: 160,
+            style: const TextStyle(color: Colors.white),
+            decoration: const InputDecoration(
+                border: OutlineInputBorder(), labelText: 'نص إشعار الظهر'),
+          ),
+          const SizedBox(height: 16),
+          const Text('🌙 إشعار المساء', style: TextStyle(color: Colors.blueAccent)),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _nightTitleCtrl,
+            maxLength: 60,
+            style: const TextStyle(color: Colors.white),
+            decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+                labelText: 'عنوان إشعار المساء'),
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _nightBodyCtrl,
+            maxLines: 2,
+            maxLength: 160,
+            style: const TextStyle(color: Colors.white),
+            decoration: const InputDecoration(
+                border: OutlineInputBorder(), labelText: 'نص إشعار المساء'),
+          ),
+          const SizedBox(height: 16),
+          ElevatedButton.icon(
+            onPressed: _busy ? null : _save,
+            icon: _busy
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2))
+                : const Icon(Icons.save_outlined),
+            label: Text(_busy ? 'جاري الحفظ...' : 'حفظ التذكير اليومي'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.blueAccent,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 14),
+            ),
+          ),
+          if (_status != null) ...[
+            const SizedBox(height: 16),
+            _StatusBox(ok: _statusOk, message: _status!),
+          ],
+        ],
+      ),
     );
   }
 }

@@ -19,6 +19,9 @@ import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:timezone/data/latest_all.dart' as tz_data;
+import 'package:timezone/timezone.dart' as tz;
+import 'package:flutter_timezone/flutter_timezone.dart';
 
 // 🔐 لوحة تحكم المشرف (ملف مستقل بجانب main.dart)
 import 'admin_panel.dart';
@@ -96,6 +99,11 @@ class NotificationService {
   static final GlobalKey<NavigatorState> navigatorKey =
       GlobalKey<NavigatorState>();
 
+  static const String _dailyRemindersChannelId = 'daily_reminders_channel';
+  static const int _noonReminderId = 9001;
+  static const int _nightReminderId = 9002;
+  static bool _tzReady = false;
+
   static Future<void> initialize() async {
     try {
       FirebaseMessaging.onBackgroundMessage(
@@ -126,10 +134,18 @@ class NotificationService {
         description: 'This channel is used for important notifications.',
         importance: Importance.high,
       );
-      await _localNotifications
+      const AndroidNotificationChannel remindersChannel =
+          AndroidNotificationChannel(
+        _dailyRemindersChannelId,
+        'Daily Reminders',
+        description: 'تذكير يومي بالخلفيات الجديدة',
+        importance: Importance.defaultImportance,
+      );
+      final androidPlugin = _localNotifications
           .resolvePlatformSpecificImplementation<
-              AndroidFlutterLocalNotificationsPlugin>()
-          ?.createNotificationChannel(channel);
+              AndroidFlutterLocalNotificationsPlugin>();
+      await androidPlugin?.createNotificationChannel(channel);
+      await androidPlugin?.createNotificationChannel(remindersChannel);
       await _fcm.setForegroundNotificationPresentationOptions(
         alert: true,
         badge: true,
@@ -322,6 +338,106 @@ class NotificationService {
     final deviceInfo = DeviceInfoPlugin();
     final androidInfo = await deviceInfo.androidInfo;
     return androidInfo.version.sdkInt;
+  }
+
+  // ===========================================================================
+  // ⏰ التذكير اليومي — إشعار محلي مجدول الساعة 12 ظهراً و10 مساءً (بتوقيت
+  // الجهاز) يذكّر المستخدم بوجود خلفيات جديدة. لا يحتاج إنترنت أو خادماً
+  // ليعمل، ويستمر حتى لو أُغلق التطبيق تماماً — بخلاف إشعار FCM اللحظي الذي
+  // يرسله المشرف يدوياً من تبويب «إشعار» في لوحة التحكم (يبقيان مستقلّين).
+  // ===========================================================================
+
+  static Future<void> _ensureTimeZone() async {
+    if (_tzReady) return;
+    tz_data.initializeTimeZones();
+    try {
+      final timezoneInfo = await FlutterTimezone.getLocalTimezone();
+      tz.setLocalLocation(tz.getLocation(timezoneInfo.identifier));
+    } catch (e) {
+      AppLogger.warning('⚠️ تعذّر تحديد المنطقة الزمنية للجهاز، استخدام UTC: $e');
+      tz.setLocalLocation(tz.UTC);
+    }
+    _tzReady = true;
+  }
+
+  static tz.TZDateTime _nextInstanceOfTime(int hour, int minute) {
+    final now = tz.TZDateTime.now(tz.local);
+    var scheduled =
+        tz.TZDateTime(tz.local, now.year, now.month, now.day, hour, minute);
+    if (scheduled.isBefore(now)) {
+      scheduled = scheduled.add(const Duration(days: 1));
+    }
+    return scheduled;
+  }
+
+  static Future<void> _scheduleDailyAt({
+    required int id,
+    required int hour,
+    required int minute,
+    required String title,
+    required String body,
+  }) async {
+    await _localNotifications.zonedSchedule(
+      id,
+      title,
+      body,
+      _nextInstanceOfTime(hour, minute),
+      const NotificationDetails(
+        android: AndroidNotificationDetails(
+          _dailyRemindersChannelId,
+          'Daily Reminders',
+          channelDescription: 'تذكير يومي بالخلفيات الجديدة',
+          importance: Importance.defaultImportance,
+          priority: Priority.defaultPriority,
+          icon: '@mipmap/launcher_icon',
+        ),
+        iOS: DarwinNotificationDetails(
+          presentAlert: true,
+          presentBadge: true,
+          presentSound: true,
+        ),
+      ),
+      // ✅ جدولة غير دقيقة عمداً: لا تحتاج إذن SCHEDULE_EXACT_ALARM الخاص
+      // (يتطلب مبرراً لدى Google Play)، وفارق بضع دقائق لا يهم في تذكير يومي.
+      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+      uiLocalNotificationDateInterpretation:
+          UILocalNotificationDateInterpretation.absoluteTime,
+      matchDateTimeComponents: DateTimeComponents.time,
+      payload: jsonEncode({'action': 'open_category', 'category': 'New'}),
+    );
+  }
+
+  /// يُلغي الجدولة الحالية ثم يعيد جدولتها بالنص الوارد من [config] — يُستدعى
+  /// عند كل إقلاع بعد جلب الإعدادات من km2-config، فيتحدّث النص المعروض خلال
+  /// يوم أو يومين من أي تعديل يجريه المشرف من لوحة التحكم بلا تحديث للتطبيق.
+  static Future<void> scheduleDailyReminders(DailyReminderModel config) async {
+    try {
+      await _localNotifications.cancel(_noonReminderId);
+      await _localNotifications.cancel(_nightReminderId);
+      if (!config.enabled) {
+        AppLogger.info('⏰ التذكير اليومي معطّل من الإعدادات');
+        return;
+      }
+
+      await _ensureTimeZone();
+      await _scheduleDailyAt(
+        id: _noonReminderId,
+        hour: 12,
+        minute: 0,
+        title: config.noonTitle,
+        body: config.noonBody,
+      );
+      await _scheduleDailyAt(
+        id: _nightReminderId,
+        hour: 22,
+        minute: 0,
+        title: config.nightTitle,
+        body: config.nightBody,
+      );
+      AppLogger.success('⏰ تمت جدولة التذكير اليومي (12:00 و22:00)');
+    } catch (e) {
+      AppLogger.error('❌ فشل جدولة التذكير اليومي: $e');
+    }
   }
 }
 
@@ -883,6 +999,70 @@ class PromoModel {
 
 /// اسم مستودع الإعلان — تستخدمه لوحة التحكم أيضاً
 const String kPromoRepo = 'KM2MY';
+
+/// مستودع التحكم بالإشعارات (نفس المستودع الذي يحوي workflow إرسال إشعار
+/// المشرف اليدوي) — يحوي أيضاً daily_reminder.json الذي يضبط نص ووقت
+/// التذكير اليومي المجدول محلياً في كل جهاز.
+const String kNotifyConfigRepo = 'km2-config';
+
+// =============================================================================
+// ⏰ DAILY REMINDER MODEL — إعدادات التذكير اليومي (12 ظهراً و10 مساءً)
+// -----------------------------------------------------------------------------
+// يُقرأ من daily_reminder.json داخل مستودع kNotifyConfigRepo. أي فشل أو غياب
+// للملف = القيم الافتراضية أدناه (silent fallback، بلا كسر للتطبيق).
+// شكل الملف (كل الحقول اختيارية):
+// {
+//   "enabled": true,
+//   "noonTitle": "...", "noonBody": "...",
+//   "nightTitle": "...", "nightBody": "..."
+// }
+// =============================================================================
+class DailyReminderModel {
+  final bool enabled;
+  final String noonTitle;
+  final String noonBody;
+  final String nightTitle;
+  final String nightBody;
+
+  const DailyReminderModel({
+    required this.enabled,
+    required this.noonTitle,
+    required this.noonBody,
+    required this.nightTitle,
+    required this.nightBody,
+  });
+
+  static const DailyReminderModel defaults = DailyReminderModel(
+    enabled: true,
+    noonTitle: '🎨 خلفيات جديدة بانتظارك',
+    noonBody: 'اكتشف أحدث الخلفيات وغيّر شكل هاتفك الآن',
+    nightTitle: '🌙 وقّت خلفية جديدة الليلة؟',
+    nightBody: 'تصفّح أحدث الإضافات قبل النوم وجدّد خلفية هاتفك',
+  );
+
+  factory DailyReminderModel.fromJson(Map<String, dynamic> json) {
+    String text(String key, String fallback) {
+      final value = (json[key] as String?)?.trim();
+      return (value == null || value.isEmpty) ? fallback : value;
+    }
+
+    return DailyReminderModel(
+      enabled: json['enabled'] != false,
+      noonTitle: text('noonTitle', defaults.noonTitle),
+      noonBody: text('noonBody', defaults.noonBody),
+      nightTitle: text('nightTitle', defaults.nightTitle),
+      nightBody: text('nightBody', defaults.nightBody),
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'enabled': enabled,
+        'noonTitle': noonTitle,
+        'noonBody': noonBody,
+        'nightTitle': nightTitle,
+        'nightBody': nightBody,
+      };
+}
 
 class CategoryModel {
   final String name;
@@ -1604,6 +1784,63 @@ class GitHubService {
   static void clearPromoCache() {
     _promoCache = null;
     _promoCachedAt = null;
+  }
+
+  // ── ⏰ إعدادات التذكير اليومي (km2-config) ─────────────────────────────
+  static const Duration _dailyReminderCacheDuration = Duration(hours: 6);
+  static DailyReminderModel? _dailyReminderCache;
+  static DateTime? _dailyReminderCachedAt;
+  static Future<DailyReminderModel>? _dailyReminderInFlight;
+
+  /// يجلب daily_reminder.json من مستودع kNotifyConfigRepo. أي فشل أو غياب
+  /// للملف = القيم الافتراضية الثابتة في DailyReminderModel.defaults.
+  static Future<DailyReminderModel> fetchDailyReminderConfig() {
+    final cachedAt = _dailyReminderCachedAt;
+    if (cachedAt != null &&
+        _dailyReminderCache != null &&
+        DateTime.now().difference(cachedAt) < _dailyReminderCacheDuration) {
+      return Future.value(_dailyReminderCache!);
+    }
+    return _dailyReminderInFlight ??= _loadDailyReminderConfig().whenComplete(() {
+      _dailyReminderInFlight = null;
+    });
+  }
+
+  static Future<DailyReminderModel> _loadDailyReminderConfig() async {
+    try {
+      final res = await _rawDio.get(
+        _toRawGithub(
+            owner: _owner,
+            repo: kNotifyConfigRepo,
+            branch: _branch,
+            path: 'daily_reminder.json'),
+        options: Options(responseType: ResponseType.plain),
+      );
+      if (res.statusCode != 200 || res.data == null) {
+        return _cacheDailyReminder(DailyReminderModel.defaults);
+      }
+      final data = jsonDecode(res.data.toString());
+      if (data is! Map) return _cacheDailyReminder(DailyReminderModel.defaults);
+
+      final config = DailyReminderModel.fromJson(Map<String, dynamic>.from(data));
+      AppLogger.info('⏰ Daily reminder config loaded (enabled=${config.enabled})');
+      return _cacheDailyReminder(config);
+    } catch (e) {
+      // 404 هو الحالة الطبيعية قبل أن يُنشئ المشرف الملف من لوحة التحكم
+      AppLogger.info('⏰ No daily_reminder.json — using defaults');
+      return _cacheDailyReminder(DailyReminderModel.defaults);
+    }
+  }
+
+  static DailyReminderModel _cacheDailyReminder(DailyReminderModel config) {
+    _dailyReminderCache = config;
+    _dailyReminderCachedAt = DateTime.now();
+    return config;
+  }
+
+  static void clearDailyReminderCache() {
+    _dailyReminderCache = null;
+    _dailyReminderCachedAt = null;
   }
 
   static void clearCache() {
@@ -5753,6 +5990,15 @@ Future<void> _initFirebaseAndNotifications() async {
     AppLogger.success('✅ Notification service initialized');
   } catch (e) {
     AppLogger.error('❌ Firebase/Notification initialization failed: $e');
+  }
+
+  // ✅ التذكير اليومي مستقل عن نجاح Firebase — يعمل بلا إنترنت أصلاً
+  // (يُستخدم الإعداد الافتراضي إن تعذّر جلب daily_reminder.json).
+  try {
+    final reminderConfig = await GitHubService.fetchDailyReminderConfig();
+    await NotificationService.scheduleDailyReminders(reminderConfig);
+  } catch (e) {
+    AppLogger.error('❌ Daily reminder scheduling failed: $e');
   }
 }
 

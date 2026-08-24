@@ -18,6 +18,10 @@ dependencies:
   firebase_messaging: ^15.1.6
   flutter_local_notifications: ^18.0.1
 
+  # التذكير اليومي المجدول محلياً (12 ظهراً و10 مساءً)
+  timezone: ^0.9.4
+  flutter_timezone: ^5.1.0
+
   # State Management & Ads
   provider: ^6.1.1
   google_mobile_ads: ^5.1.0
