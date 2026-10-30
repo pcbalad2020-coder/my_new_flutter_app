@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'dart:ui';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
@@ -141,8 +142,8 @@ class NotificationService {
         description: 'تذكير يومي بالخلفيات الجديدة',
         importance: Importance.defaultImportance,
       );
-      final androidPlugin = _localNotifications
-          .resolvePlatformSpecificImplementation<
+      final androidPlugin =
+          _localNotifications.resolvePlatformSpecificImplementation<
               AndroidFlutterLocalNotificationsPlugin>();
       await androidPlugin?.createNotificationChannel(channel);
       await androidPlugin?.createNotificationChannel(remindersChannel);
@@ -354,7 +355,8 @@ class NotificationService {
       final timezoneInfo = await FlutterTimezone.getLocalTimezone();
       tz.setLocalLocation(tz.getLocation(timezoneInfo.identifier));
     } catch (e) {
-      AppLogger.warning('⚠️ تعذّر تحديد المنطقة الزمنية للجهاز، استخدام UTC: $e');
+      AppLogger.warning(
+          '⚠️ تعذّر تحديد المنطقة الزمنية للجهاز، استخدام UTC: $e');
       tz.setLocalLocation(tz.UTC);
     }
     _tzReady = true;
@@ -1801,7 +1803,8 @@ class GitHubService {
         DateTime.now().difference(cachedAt) < _dailyReminderCacheDuration) {
       return Future.value(_dailyReminderCache!);
     }
-    return _dailyReminderInFlight ??= _loadDailyReminderConfig().whenComplete(() {
+    return _dailyReminderInFlight ??=
+        _loadDailyReminderConfig().whenComplete(() {
       _dailyReminderInFlight = null;
     });
   }
@@ -1822,8 +1825,10 @@ class GitHubService {
       final data = jsonDecode(res.data.toString());
       if (data is! Map) return _cacheDailyReminder(DailyReminderModel.defaults);
 
-      final config = DailyReminderModel.fromJson(Map<String, dynamic>.from(data));
-      AppLogger.info('⏰ Daily reminder config loaded (enabled=${config.enabled})');
+      final config =
+          DailyReminderModel.fromJson(Map<String, dynamic>.from(data));
+      AppLogger.info(
+          '⏰ Daily reminder config loaded (enabled=${config.enabled})');
       return _cacheDailyReminder(config);
     } catch (e) {
       // 404 هو الحالة الطبيعية قبل أن يُنشئ المشرف الملف من لوحة التحكم
@@ -2553,6 +2558,20 @@ class _ImageGate {
       _active--;
     }
   }
+}
+
+class _AppImageCacheManager extends CacheManager with ImageCacheManager {
+  static const String _cacheKey = 'libCachedImageData';
+  static final _AppImageCacheManager _instance = _AppImageCacheManager._();
+
+  factory _AppImageCacheManager() => _instance;
+
+  _AppImageCacheManager._()
+      : super(Config(
+          _cacheKey,
+          stalePeriod: const Duration(days: 7),
+          maxNrOfCacheObjects: 1000,
+        ));
 }
 
 /// ✅ صورة شبكية مع تراجع تلقائي: إذا فشل رابط المصغّر (وسيط خارجي محجوب
@@ -6004,6 +6023,10 @@ Future<void> _initFirebaseAndNotifications() async {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // احتفظ بكاش القرص الافتراضي نفسه، مع سعة أكبر لتجنب إعادة تنزيل الصور
+  // عند التنقل بين الأقسام الكثيرة.
+  CachedNetworkImageProvider.defaultCacheManager = _AppImageCacheManager();
 
   // ✅ حدّ كاش الصور: الافتراضي 100 ميجابايت، وهو سبب رئيسي لقتل iOS للتطبيق
   // (jetsam) عند التمرير في أقسام فيها صور 4K. 60 ميجابايت كافية تماماً.
