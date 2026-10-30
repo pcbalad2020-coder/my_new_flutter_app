@@ -2598,6 +2598,7 @@ class _NetImageState extends State<NetImage> {
   bool _useFallback = false;
   bool _hasSlot = false; // هل نحجز مكاناً في بوابة التنزيل الآن؟
   bool _ready = false; // هل حان دورنا لبدء التحميل؟
+  int _loadGeneration = 0;
 
   String get _primary =>
       widget.url.isNotEmpty ? widget.url : widget.fallbackUrl;
@@ -2607,12 +2608,39 @@ class _NetImageState extends State<NetImage> {
   @override
   void initState() {
     super.initState();
-    _requestSlot();
+    _prepareImage(_primary);
   }
 
-  Future<void> _requestSlot() async {
+  Future<void> _prepareImage(String url) async {
+    final generation = ++_loadGeneration;
+    _releaseSlot();
+
+    final provider = ResizeImage.resizeIfNeeded(
+      widget.memWidth,
+      null,
+      CachedNetworkImageProvider(url),
+    );
+    final memoryHit = PaintingBinding.instance.imageCache.containsKey(provider);
+    var diskHit = false;
+    if (!memoryHit) {
+      try {
+        final file = await CachedNetworkImageProvider.defaultCacheManager
+            .getFileFromCache(url);
+        diskHit = file != null && file.validTill.isAfter(DateTime.now());
+      } catch (e) {
+        AppLogger.error('❌ Image cache lookup failed for $url: $e');
+      }
+    }
+
+    if (!mounted || generation != _loadGeneration) return;
+    if (memoryHit || diskHit) {
+      setState(() => _ready = true);
+      _startWatchdog();
+      return;
+    }
+
     await _ImageGate.acquire();
-    if (!mounted) {
+    if (!mounted || generation != _loadGeneration) {
       _ImageGate.release();
       return;
     }
@@ -2634,7 +2662,8 @@ class _NetImageState extends State<NetImage> {
         oldWidget.fallbackUrl != widget.fallbackUrl) {
       _watchdog?.cancel();
       _useFallback = false;
-      _startWatchdog();
+      _ready = false;
+      _prepareImage(_primary);
     }
   }
 
@@ -3133,11 +3162,10 @@ class _SplashScreenState extends State<SplashScreen>
         curve: const Interval(0.5, 1.0, curve: Curves.easeIn)));
     _controller.forward();
 
-    // ✅ تحميل مسبق لأول قسمين أثناء ظهور شاشة البداية → الرئيسية تفتح جاهزة
-    // ✅ التحميل المسبق يبدأ الآن من main() قبل حتى ظهور هذه الشاشة (أثناء
-    // تهيئة AdMob)، فيصل هنا وقد بدأ فعلياً أو اكتمل. futureOf مُخزَّن مسبقاً
-    // (memoized) لذا لا يتكرر أي طلب شبكة بإعادة النداء هنا.
-    unawaited(_prefetchInitialWallpapers());
+    // ابدأ الجلب المسبق بعد رسم شاشة البداية حتى لا ينافس أول إطار.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(_prefetchInitialWallpapers());
+    });
 
     bool adFinished = false;
     bool splashTimeElapsed = false;
@@ -6046,15 +6074,7 @@ void main() async {
       statusBarColor: Colors.transparent,
       statusBarIconBrightness: Brightness.light));
 
-  // Firebase في الخلفية — لا يعطّل الإقلاع
-  unawaited(_initFirebaseAndNotifications());
-  unawaited(GitHubService.probeThumbProxy());
-
-  // ✅ صور أول شاشة تبدأ بالتنزيل فوراً هنا، بالتوازي مع تهيئة AdMob أدناه،
-  // بدل انتظار اكتمال الإقلاع كله (حتى 3 ثوانٍ) قبل أول طلب شبكة للصور.
-  unawaited(_prefetchInitialWallpapers());
-
-  // AdMob بمهلة قصوى 3 ثوانٍ حتى لا تتعطل الشاشة على شبكة بطيئة
+  // تهيئة AdMob محدودة بمهلة حتى لا يتعطل الإقلاع على شبكة بطيئة.
   try {
     await AdMobManager()
         .initialize()
@@ -6083,4 +6103,8 @@ void main() async {
       child: const WallpaperApp(),
     ),
   );
+
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    unawaited(_initFirebaseAndNotifications());
+  });
 }
