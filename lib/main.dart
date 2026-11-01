@@ -2924,50 +2924,56 @@ class PrivacyPolicyScreen extends StatelessWidget {
   const PrivacyPolicyScreen({super.key});
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.transparent,
-      body: Container(
-        decoration: const BoxDecoration(
-            gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-              Color(0xFF0F0F1A),
-              Color(0xFF0F2027),
-              Color(0xFF1A1A2E)
-            ])),
-        child: SafeArea(
-          child: Column(children: [
-            Padding(
-                padding: const EdgeInsets.fromLTRB(8, 8, 16, 0),
-                child: Row(children: [
-                  IconButton(
-                      icon: const Icon(Icons.arrow_back_ios_new,
-                          color: Colors.white, size: 20),
-                      onPressed: () => Navigator.pop(context)),
-                  Text('سياسة الخصوصية',
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        body: Container(
+          decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                Color(0xFF0F0F1A),
+                Color(0xFF0F2027),
+                Color(0xFF1A1A2E)
+              ])),
+          child: SafeArea(
+            child: Column(children: [
+              Padding(
+                  padding: const EdgeInsets.fromLTRB(8, 8, 16, 0),
+                  child: Row(children: [
+                    IconButton(
+                        icon: const Icon(Icons.arrow_back_ios_new,
+                            color: Colors.white, size: 20),
+                        onPressed: () => Navigator.pop(context)),
+                    Text('سياسة الخصوصية',
+                        style: AppFonts.poppins(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                            fontSize: 18))
+                  ])),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: SolidPanel(
+                    radius: 20,
+                    padding: const EdgeInsets.all(20),
+                    child: SingleChildScrollView(
+                        child: Text(
+                      kPrivacyPolicyText,
+                      textAlign: TextAlign.right,
+                      textDirection: TextDirection.rtl,
                       style: AppFonts.poppins(
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                          fontSize: 18))
-                ])),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: SolidPanel(
-                  radius: 20,
-                  padding: const EdgeInsets.all(20),
-                  child: SingleChildScrollView(
-                      child: Text(kPrivacyPolicyText,
-                          style: AppFonts.poppins(
-                              color: Colors.white.withValues(alpha: 0.88),
-                              fontSize: 13.5,
-                              height: 1.9),
-                          textDirection: TextDirection.rtl)),
+                          color: Colors.white.withValues(alpha: 0.88),
+                          fontSize: 13.5,
+                          height: 1.9),
+                    )),
+                  ),
                 ),
               ),
-            ),
-          ]),
+            ]),
+          ),
         ),
       ),
     );
@@ -2988,9 +2994,12 @@ class _PrivacyPolicyDialogState extends State<PrivacyPolicyDialog> {
   void initState() {
     super.initState();
     _scrollController.addListener(() {
-      if (_scrollController.position.pixels >=
-          _scrollController.position.maxScrollExtent - 20) {
-        if (!_scrolledToEnd) setState(() => _scrolledToEnd = true);
+      final reachedEnd = _scrollController.position.pixels >=
+          _scrollController.position.maxScrollExtent - 20;
+      if (reachedEnd && !_scrolledToEnd) {
+        setState(() => _scrolledToEnd = true);
+      } else if (!reachedEnd && _scrolledToEnd) {
+        setState(() => _scrolledToEnd = false);
       }
     });
   }
@@ -3005,105 +3014,114 @@ class _PrivacyPolicyDialogState extends State<PrivacyPolicyDialog> {
   Widget build(BuildContext context) {
     return PopScope(
       canPop: false,
-      child: Dialog(
-        backgroundColor: Colors.transparent,
-        insetPadding: const EdgeInsets.all(16),
-        child: Container(
-          constraints: BoxConstraints(
-              maxHeight: MediaQuery.of(context).size.height * 0.78),
-          decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [Color(0xFF0F2027), Color(0xFF1A1A2E)]),
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.15))),
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            Container(
-              padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
-              decoration: BoxDecoration(
-                  border: Border(
-                      bottom: BorderSide(
-                          color: Colors.white.withValues(alpha: 0.1)))),
-              child: Row(children: [
-                Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                        color: Colors.blueAccent.withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(10)),
-                    child: const Icon(Icons.privacy_tip_outlined,
-                        color: Colors.blueAccent, size: 22)),
-                const SizedBox(width: 12),
-                Expanded(
-                    child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                      Text('سياسة الخصوصية',
-                          style: AppFonts.poppins(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 17)),
-                      Text('يرجى القراءة قبل المتابعة',
-                          style: AppFonts.poppins(
-                              color: Colors.grey[400], fontSize: 12))
-                    ])),
-              ]),
-            ),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Scrollbar(
-                  controller: _scrollController,
-                  thumbVisibility: true,
-                  child: SingleChildScrollView(
-                      controller: _scrollController,
-                      child: Text(kPrivacyPolicyText,
+      child: Directionality(
+        textDirection: TextDirection.rtl,
+        child: Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.all(16),
+          child: Container(
+            constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(context).size.height * 0.78),
+            decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [Color(0xFF0F2027), Color(0xFF1A1A2E)]),
+                borderRadius: BorderRadius.circular(24),
+                border:
+                    Border.all(color: Colors.white.withValues(alpha: 0.15))),
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              Container(
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
+                decoration: BoxDecoration(
+                    border: Border(
+                        bottom: BorderSide(
+                            color: Colors.white.withValues(alpha: 0.1)))),
+                child: Row(children: [
+                  Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                          color: Colors.blueAccent.withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(10)),
+                      child: const Icon(Icons.privacy_tip_outlined,
+                          color: Colors.blueAccent, size: 22)),
+                  const SizedBox(width: 12),
+                  Expanded(
+                      child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                        Text('سياسة الخصوصية',
+                            style: AppFonts.poppins(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 17)),
+                        Text('يرجى القراءة قبل المتابعة',
+                            style: AppFonts.poppins(
+                                color: Colors.grey[400], fontSize: 12))
+                      ])),
+                ]),
+              ),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Scrollbar(
+                    controller: _scrollController,
+                    thumbVisibility: true,
+                    child: SingleChildScrollView(
+                        controller: _scrollController,
+                        child: Text(
+                          kPrivacyPolicyText,
+                          textAlign: TextAlign.right,
+                          textDirection: TextDirection.rtl,
                           style: AppFonts.poppins(
                               color: Colors.white.withValues(alpha: 0.85),
                               fontSize: 13,
                               height: 1.8),
-                          textDirection: TextDirection.rtl)),
+                        )),
+                  ),
                 ),
               ),
-            ),
-            if (!_scrolledToEnd)
+              if (!_scrolledToEnd)
+                Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.keyboard_arrow_down,
+                              color: Colors.blueAccent.withValues(alpha: 0.7),
+                              size: 18),
+                          Text('مرر للأسفل للمتابعة',
+                              style: AppFonts.poppins(
+                                  color: Colors.grey[500], fontSize: 11))
+                        ])),
               Padding(
-                  padding: const EdgeInsets.only(bottom: 4),
-                  child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.keyboard_arrow_down,
-                            color: Colors.blueAccent.withValues(alpha: 0.7),
-                            size: 18),
-                        Text('مرر للأسفل للمتابعة',
-                            style: AppFonts.poppins(
-                                color: Colors.grey[500], fontSize: 11))
-                      ])),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-              child: SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () async {
-                    final navigator = Navigator.of(context);
-                    await context.read<PrivacyProvider>().accept();
-                    navigator.pop();
-                  },
-                  style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blueAccent,
-                      padding: const EdgeInsets.symmetric(vertical: 15),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16)),
-                      elevation: 0),
-                  child: Text('أوافق على سياسة الخصوصية',
-                      style: AppFonts.poppins(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 14)),
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: _scrolledToEnd
+                        ? () async {
+                            final navigator = Navigator.of(context);
+                            await context.read<PrivacyProvider>().accept();
+                            navigator.pop();
+                          }
+                        : null,
+                    style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blueAccent,
+                        padding: const EdgeInsets.symmetric(vertical: 15),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16)),
+                        elevation: 0),
+                    child: Text('أوافق على سياسة الخصوصية',
+                        style: AppFonts.poppins(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 14)),
+                  ),
                 ),
               ),
-            ),
-          ]),
+            ]),
+          ),
         ),
       ),
     );
@@ -4456,9 +4474,12 @@ class _TopAutoSlider169State extends State<_TopAutoSlider169> {
               borderRadius: BorderRadius.circular(28),
               child: NotificationListener<ScrollNotification>(
                 onNotification: (notif) {
-                  if (notif is ScrollStartNotification) _timer?.cancel();
-                  if (notif is ScrollEndNotification)
+                  if (notif is ScrollStartNotification) {
+                    _timer?.cancel();
+                  }
+                  if (notif is ScrollEndNotification) {
                     _restartAutoSlideDelayed();
+                  }
                   return false;
                 },
                 child: PageView.builder(
